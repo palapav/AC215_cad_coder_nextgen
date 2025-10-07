@@ -1,0 +1,10 @@
+[packages]
+pandas = "*"
+numpy = "*"
+scikit-learn = "*"
+opencv-python = "*"
+requests = "*"
+faiss-cpu = "*"
+
+[requires]
+python_version = "3.11"
