@@ -1,0 +1,15 @@
+[project]
+name = "cadcoder-ingestion"
+version = "0.1.0"
+description = "Containerized data ingestion step for CAD-Coder pipeline"
+authors = [{ name = "Jing Xu" }]
+requires-python = ">=3.11"
+
+dependencies = [
+    "datasets>=2.19.0",
+    "pillow>=10.0.0"
+    "tqdm>=4.65.0",
+    "numpy>=1.25.0",
+    "pydantic>=2.7.0",
+    "opencv-python>=
+]
