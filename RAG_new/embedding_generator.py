@@ -69,7 +69,7 @@ class EmbeddingGenerator:
 
         for uri in image_files:
             emb = self.get_image_embedding_with_retry(uri)
-            metadata = {"uri": uri, "type": "image", "filename": os.path.basename(uri), "paired_item": "None"}
+            metadata = {"uri": uri, "type": "image", "filename": os.path.basename(uri)}
             datapoints.append({
                 "datapoint_id": f"img_{len(datapoints)}",
                 "feature_vector": emb,
@@ -108,7 +108,16 @@ class EmbeddingGenerator:
                     chunks = chunk_code_text(code)
                     embeddings = self.get_text_embeddings_with_retry(chunks)
                     for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
-                        metadata = {"source_uri": uri, "type": "code", "item_id": item_id, "paired_image": matching_uri or "None"}
+                        metadata = {
+                            "source_uri": uri, 
+                            "type": "code", 
+                            "item_id": item_id,
+                            "cad_code": chunk,  # Store the actual CAD code chunk
+                            "chunk_index": str(i),
+                            "total_chunks": str(len(chunks))
+                        }
+                        if matching_uri:
+                            metadata["paired_image"] = matching_uri
                         datapoints.append({
                             "datapoint_id": f"code_{item_id}_c{i}",
                             "feature_vector": emb,
