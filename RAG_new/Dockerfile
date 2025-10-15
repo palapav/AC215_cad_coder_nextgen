@@ -9,13 +9,23 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Install uv using pip (simpler and more reliable in Docker)
+RUN pip install --no-cache-dir uv
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy pyproject.toml
+COPY pyproject.toml .
 
-# Copy all RAG files
+# Copy Python source files
+COPY *.py .
+
+# Install dependencies from pyproject.toml using uv
+# Note: We install dependencies directly, matching pyproject.toml
+RUN uv pip install --system \
+    "google-cloud-aiplatform[rag]>=1.38.0" \
+    "python-dotenv>=1.0.0" \
+    "Pillow>=10.0.0"
+
+# Copy remaining files (config, keys, etc.)
 COPY . .
 
 # Set environment variables

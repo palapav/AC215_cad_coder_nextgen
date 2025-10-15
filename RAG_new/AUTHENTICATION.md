@@ -1,8 +1,66 @@
-# Authentication Guide
+# Authentication & Dependency Management Guide
 
 ## Current Setup
 
 You are using **service account authentication** with a key file.
+
+---
+
+## Dependency Management (pyproject.toml + uv)
+
+### How Docker Uses pyproject.toml
+
+The Dockerfile is configured to use **uv** (a fast Python package manager) with `pyproject.toml`:
+
+```dockerfile
+# 1. Install uv in the container
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 2. Copy pyproject.toml and source files
+COPY pyproject.toml .
+COPY *.py .
+
+# 3. Install project dependencies from pyproject.toml
+RUN uv pip install --system .
+```
+
+### What Happens During Build
+
+1. **uv reads `pyproject.toml`** to find dependencies:
+   ```toml
+   dependencies = [
+       "google-cloud-aiplatform[rag]",
+       "python-dotenv",
+       "Pillow",
+   ]
+   ```
+
+2. **Installs packages** into the system Python (no virtual env needed in container)
+
+3. **Benefits of uv**:
+   - 10-100x faster than pip
+   - Better dependency resolution
+   - Reads modern `pyproject.toml` format
+   - Better caching
+
+### Local Development
+
+For local development, you can use either:
+
+**Option 1: uv (recommended)**
+```bash
+pip install uv
+uv pip install .
+```
+
+**Option 2: Traditional pip**
+```bash
+pip install -r requirements.txt
+```
+
+Both `pyproject.toml` and `requirements.txt` are maintained for compatibility.
+
+---
 
 ## How It Works
 
