@@ -1,0 +1,17 @@
+[project]
+name = "cad-coder-rag"
+version = "0.1.0"
+description = "Multimodal RAG pipeline for CAD code generation"
+requires-python = ">=3.11"
+dependencies = [
+    "google-cloud-aiplatform[rag]>=1.38.0",
+    "python-dotenv>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = []
+
