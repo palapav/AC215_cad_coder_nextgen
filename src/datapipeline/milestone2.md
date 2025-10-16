@@ -28,8 +28,8 @@ This document provides the step-by-step instructions for creating a Google Cloud
 4.  Click **CREATE**.
 5.  **Verify the VM status:** Confirm the instance, `cad-coder-container-vm`, is in the **Running** state.
 
-Screenshot location: /docs/screenshots/milestone2.1_helloworld.png
-![Google Cloud VM Instance List showing cad-coder-container-vm is Running](docs/screenshots/milestone2.1_helloworld.png "Instance Running:")
+Screenshot location: /docs/screenshots/milestone2.1_vm_setup.png
+![Google Cloud VM Instance List showing cad-coder-container-vm is Running](docs/screenshots/milestone2.1_vm_setup.png "Instance Running:")
 
 ---
 
