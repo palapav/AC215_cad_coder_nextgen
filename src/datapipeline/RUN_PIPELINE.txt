@@ -30,6 +30,15 @@ docker-compose up
 docker-compose up --build
 
 
+SAVE PIPELINE OUTPUT TO LOG FILE
+----------------------------------
+# Option 1: Using the provided script
+./run_and_log.sh PIPELINE_RUN.log
+
+# Option 2: Manual command
+docker-compose up 2>&1 | tee PIPELINE_RUN.log
+
+
 WHAT HAPPENS:
 -------------
 1. Validation:    Checks auth (< 1 sec)
