@@ -28,7 +28,8 @@ This document provides the step-by-step instructions for creating a Google Cloud
 4.  Click **CREATE**.
 5.  **Verify the VM status:** Confirm the instance, `cad-coder-container-vm`, is in the **Running** state.
 
-![Google Cloud VM Instance List showing cad-coder-container-vm is Running](docs/screenshots/milestone2.1_helloworld.png "Instance Running: docs/screenshots/milestone2.1_helloworld.png")
+Screenshot location: /docs/screenshots/milestone2.1_helloworld.png
+![Google Cloud VM Instance List showing cad-coder-container-vm is Running](docs/screenshots/milestone2.1_helloworld.png "Instance Running:")
 
 ---
 
@@ -61,7 +62,9 @@ Execute the `hello-world` container to confirm that Docker is correctly installe
     ```
     * **Confirmation:** The output confirms that the Docker installation appears to be working correctly, having pulled the `hello-world:latest` image and executed the container.
 
-![SSH terminal showing Docker run hello-world command and successful output](docs/screenshots/milestone2.1_helloworld.png "Docker Hello-World Run: docs/screenshots/milestone2.1_helloworld.png")
+Screenshot location:
+/docs/screenshots/milestone2.1_helloworld.png
+![SSH terminal showing Docker run hello-world command and successful output](docs/screenshots/milestone2.1_helloworld.png "Docker Hello-World Run:")
 
 2.  **Verify container execution and status:**
     ```bash
@@ -69,7 +72,9 @@ Execute the `hello-world` container to confirm that Docker is correctly installe
     ```
     * **Confirmation:** The `hello-world` container is listed with a **STATUS** of `Exited (0)`. This confirms successful execution and completion.
 
-![SSH terminal showing the output of sudo docker ps -a](docs/screenshots/milestone2.1_psa.png "Docker Container Exited Status: docs/screenshots/milestone2.1_psa.png")
+Screenshot location:
+/docs/screenshots/milestone2.1_psa.png
+![SSH terminal showing the output of sudo docker ps -a](docs/screenshots/milestone2.1_psa.png "Docker Container Exited Status:")
 
 ---
 
