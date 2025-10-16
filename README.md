@@ -1,7 +1,7 @@
 # cad-coder-nextgen: Fine-tuning and Deploying Large-Scale Vision Language Models for CAD Code Generation 
+# Milestone2: AC215 CAD-Coder Project MS2 Documentation
 
-Team Members: Yuyan Fan, Jing Xu, Frank Chen, Aditya Palaparthi
-
+Project Team Members: Yuyan Fan, Jing Xu, Frank Chen, Aditya Palaparthi
 Group Name: CAD-Coder
 
 Project:
