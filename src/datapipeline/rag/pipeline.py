@@ -1,9 +1,19 @@
+#!/usr/bin/env python
+"""
+pipeline.py
+-----------
+RAG pipeline that reads preprocessed data and creates vector embeddings.
 
+Reads from: gs://{bucket}/processed_data/{split}/
+"""
+
+import os
 import logging
+import argparse
 from vertexai import init as vertex_init
 from google.cloud import aiplatform
 
-from config import load_config, DEPLOYED_INDEX_ID
+from config import DEPLOYED_INDEX_ID
 from storage_utils import list_gcs_files
 from embedding_generator import EmbeddingGenerator
 from vector_search import VectorSearchManager
@@ -14,22 +24,37 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-def initialize_vertex_ai(config: dict):
+def initialize_vertex_ai(project_id: str, location: str):
     """Initialize Vertex AI SDKs."""
-    aiplatform.init(project=config["project_id"], location=config["location"])
-    vertex_init(project=config["project_id"], location=config["location"])
-    logging.info(f"Vertex AI initialized for project: {config['project_id']}, location: {config['location']}")
+    aiplatform.init(project=project_id, location=location)
+    vertex_init(project=project_id, location=location)
+    logging.info(f"Vertex AI initialized for project: {project_id}, location: {location}")
 
 def main():
-    logging.info("======== Starting Vertex AI Multi-Modal RAG Pipeline ========")
+    parser = argparse.ArgumentParser(description="RAG Pipeline for CAD-Coder")
+    parser.add_argument("--bucket", type=str, default=os.getenv("GCS_BUCKET", "cad-coder-nextgen-data"))
+    parser.add_argument("--split", type=str, default=os.getenv("PIPELINE_SPLIT", "test"))
+    parser.add_argument("--project_id", type=str, default=os.getenv("PROJECT_ID", "cad-coder-nextgen"))
+    parser.add_argument("--location", type=str, default=os.getenv("LOCATION", "us-central1"))
+    args = parser.parse_args()
+    
+    # Construct GCS URI from preprocessed data
+    gcs_uri = f"gs://{args.bucket}/processed_data/{args.split}"
+    
+    logging.info("=" * 60)
+    logging.info("🧠 CAD-CODER RAG PIPELINE")
+    logging.info("=" * 60)
+    logging.info(f"📥 Reading preprocessed data from: {gcs_uri}")
+    logging.info(f"📊 Split: {args.split}")
     
     try:
-        config = load_config()
-        initialize_vertex_ai(config)
+        initialize_vertex_ai(args.project_id, args.location)
         
-        files = list_gcs_files(config["gcs_uri"])
+        files = list_gcs_files(gcs_uri)
         if not files:
-            raise RuntimeError(f"No files found in GCS bucket: {config['gcs_uri']}")
+            raise RuntimeError(f"No files found in {gcs_uri}")
+        
+        logging.info(f"📋 Found {len(files)} files to process")
         
         embedding_generator = EmbeddingGenerator()
         datapoints = embedding_generator.generate_embeddings(files)
@@ -37,22 +62,26 @@ def main():
         if not datapoints:
             raise RuntimeError("No embeddings were generated. Check file content and types.")
         
-        # CORRECTED: Use 'feature_vector' to get dimensions
+        # Get dimensions from first datapoint
         dimensions = len(datapoints[0]["feature_vector"])
+        logging.info(f"📐 Vector dimensions: {dimensions}")
         
-        vector_search = VectorSearchManager(config["project_id"], config["location"])
+        vector_search = VectorSearchManager(args.project_id, args.location)
         vector_search.setup_infrastructure(dimensions)
         
         vector_search.upsert_datapoints(datapoints)
         
-        logging.info("\n======== ✅ Pipeline Finished Successfully ✅ ========")
-        logging.info(f"- Index:        {vector_search.index.resource_name}")
-        logging.info(f"- Endpoint:     {vector_search.endpoint.resource_name}")
-        logging.info(f"- Total Vectors Upserted: {len(datapoints)}")
+        logging.info("\n" + "=" * 60)
+        logging.info("✅ RAG PIPELINE COMPLETE")
+        logging.info("=" * 60)
+        logging.info(f"📊 Split processed: {args.split}")
+        logging.info(f"📦 Source: {gcs_uri}")
+        logging.info(f"🔢 Total vectors upserted: {len(datapoints)}")
+        logging.info(f"📍 Index: {vector_search.index.resource_name}")
+        logging.info(f"🔗 Endpoint: {vector_search.endpoint.resource_name}")
         
     except Exception as e:
-        logging.error(f"❌ Pipeline failed with critical error: {e}", exc_info=True)
-        # Re-raise to ensure the script exits with a non-zero status code
+        logging.error(f"❌ RAG pipeline failed: {e}", exc_info=True)
         raise
 
 if __name__ == "__main__":

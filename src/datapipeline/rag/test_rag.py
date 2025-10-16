@@ -3,9 +3,10 @@ Simple test script to demonstrate RAG retrieval capabilities.
 Run this after pipeline.py has successfully indexed your data.
 """
 
+import os
 import logging
 from rag_retrieval import MultimodalRAGRetriever, build_llm_prompt
-from config import load_config
+# Config loaded from environment variables
 
 # Configure logging
 logging.basicConfig(
@@ -19,8 +20,9 @@ def test_single_text_query():
     print("TEST 1: Single Text Query")
     print("="*80 + "\n")
     
-    config = load_config()
-    retriever = MultimodalRAGRetriever(config["project_id"], config["location"])
+    project_id = os.getenv("PROJECT_ID", "cad-coder-nextgen")
+    location = os.getenv("LOCATION", "us-central1")
+    retriever = MultimodalRAGRetriever(project_id, location)
     
     # Example query
     query = "Create a box with rounded corners"
@@ -60,8 +62,9 @@ def test_batch_queries():
     print("TEST 2: Batch Text Queries")
     print("="*80 + "\n")
     
-    config = load_config()
-    retriever = MultimodalRAGRetriever(config["project_id"], config["location"])
+    project_id = os.getenv("PROJECT_ID", "cad-coder-nextgen")
+    location = os.getenv("LOCATION", "us-central1")
+    retriever = MultimodalRAGRetriever(project_id, location)
     
     # Multiple queries
     queries = [
@@ -94,8 +97,9 @@ def test_prompt_formatting():
     print("TEST 3: RAG Retrieval + Prompt Formatting")
     print("="*80 + "\n")
     
-    config = load_config()
-    retriever = MultimodalRAGRetriever(config["project_id"], config["location"])
+    project_id = os.getenv("PROJECT_ID", "cad-coder-nextgen")
+    location = os.getenv("LOCATION", "us-central1")
+    retriever = MultimodalRAGRetriever(project_id, location)
     
     query = "Create a simple cylinder with a through hole"
     
@@ -142,8 +146,9 @@ def test_multimodal_query():
     print("TEST 4: Multimodal Query (Text + Image)")
     print("="*80 + "\n")
     
-    config = load_config()
-    retriever = MultimodalRAGRetriever(config["project_id"], config["location"])
+    project_id = os.getenv("PROJECT_ID", "cad-coder-nextgen")
+    location = os.getenv("LOCATION", "us-central1")
+    retriever = MultimodalRAGRetriever(project_id, location)
     
     # Test with different text + image combinations
     test_cases = [
@@ -208,8 +213,9 @@ def test_metadata_retrieval():
     print("TEST 5: Metadata Retrieval Verification")
     print("="*80 + "\n")
     
-    config = load_config()
-    retriever = MultimodalRAGRetriever(config["project_id"], config["location"])
+    project_id = os.getenv("PROJECT_ID", "cad-coder-nextgen")
+    location = os.getenv("LOCATION", "us-central1")
+    retriever = MultimodalRAGRetriever(project_id, location)
     
     # Retrieve some code examples
     results = retriever.query_text("CAD code", top_k=5, filter_type="code")

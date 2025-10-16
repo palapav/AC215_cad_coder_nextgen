@@ -16,7 +16,7 @@ import re
 from google.cloud import aiplatform
 from vertexai.preview.vision_models import MultiModalEmbeddingModel, Image
 
-from config import load_config, INDEX_NAME, ENDPOINT_NAME, DEPLOYED_INDEX_ID
+from config import INDEX_NAME, ENDPOINT_NAME, DEPLOYED_INDEX_ID
 from storage_utils import load_image_from_gcs
 
 # Configure logging
@@ -427,9 +427,12 @@ def main():
     
     args = parser.parse_args()
     
-    # Load config and initialize retriever
-    config = load_config()
-    retriever = MultimodalRAGRetriever(config["project_id"], config["location"])
+    # Get config from environment
+    project_id = os.getenv("PROJECT_ID", "cad-coder-nextgen")
+    location = os.getenv("LOCATION", "us-central1")
+    
+    # Initialize retriever
+    retriever = MultimodalRAGRetriever(project_id, location)
     
     # Process based on mode
     if args.mode == "text":

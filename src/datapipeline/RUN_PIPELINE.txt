@@ -1,0 +1,99 @@
+=============================================================================
+CAD-CODER PIPELINE - RUN COMMANDS
+=============================================================================
+
+SETUP (One time only)
+---------------------
+1. Edit .env file:
+   cd src/datapipeline
+   nano .env
+   
+   Set:
+   - PIPELINE_SPLIT=test  (or train, validation)
+   - PIPELINE_LIMIT=5     (number of samples to process)
+
+2. Ensure key.json exists:
+   ls -la key.json
+
+
+FULL PIPELINE (Ingestion → Preprocessing → RAG)
+------------------------------------------------
+cd src/datapipeline
+
+# Clean up any old containers
+docker-compose down
+
+# Run entire pipeline (uses cached images, no rebuild needed)
+docker-compose up
+
+# To rebuild (only if code changed)
+docker-compose up --build
+
+
+WHAT HAPPENS:
+-------------
+1. Validation:    Checks auth (< 1 sec)
+2. Ingestion:     HuggingFace → GCS raw_data/test/        (~10 sec, cached after 1st run)
+3. Preprocessing: GCS raw_data/test/ → GCS processed_data/test/  (~15 sec)
+4. RAG:          GCS processed_data/test/ → Vector DB    (~60 sec)
+5. RAG Testing:   Test retrieval on embedded data         (~30 sec, all test cases)
+
+
+DATA FLOW (SAME 5 FILES):
+--------------------------
+HuggingFace
+    ↓ (ingestion)
+gs://cad-coder-nextgen-data/raw_data/test/  (5 images + 5 code files)
+    ↓ (preprocessing)
+gs://cad-coder-nextgen-data/processed_data/test/  (5 processed images + 1 JSONL)
+    ↓ (RAG)
+Vertex AI Vector Database  (embeddings for those 5 files)
+
+
+TEST RAG RETRIEVAL (manual testing)
+------------------------------------
+# RAG tests run automatically after pipeline completes
+# To run tests manually:
+
+cd src/datapipeline
+
+# Run specific tests
+docker-compose run --rm rag_test python test_rag.py single
+docker-compose run --rm rag_test python test_rag.py batch
+docker-compose run --rm rag_test python test_rag.py multimodal
+
+# View detailed test results
+docker logs cad-rag-test
+
+
+PROCESS DIFFERENT SPLITS
+-------------------------
+Edit .env:
+  PIPELINE_SPLIT=train     # or validation
+  PIPELINE_LIMIT=10        # or 50, 100, etc.
+
+Then run:
+  docker-compose down
+  docker-compose up
+
+
+VERIFY DATA IN GCS
+------------------
+# Check raw data
+gsutil ls gs://cad-coder-nextgen-data/raw_data/test/
+
+# Check processed data
+gsutil ls gs://cad-coder-nextgen-data/processed_data/test/
+
+# Download JSONL to inspect
+gsutil cp gs://cad-coder-nextgen-data/processed_data/test/dataset.jsonl .
+
+
+CLEAN UP
+--------
+# Remove containers
+docker-compose down
+
+# Remove all data and start fresh
+docker-compose down -v  # Also removes HuggingFace cache volume
+
