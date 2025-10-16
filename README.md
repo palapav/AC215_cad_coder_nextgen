@@ -1,5 +1,6 @@
-# cad-coder-nextgen: Fine-tuning and Deploying Large-Scale Vision Language Models for CAD Code Generation 
-# Milestone2: AC215 CAD-Coder Project MS2 Documentation
+# cad-coder-nextgen: Fine-tuning and Deploying Large-Scale Vision Language Models for CAD Code Generation
+
+## Milestone2: AC215 CAD-Coder Project MS2 Documentation: Please see the detailed markdown file located in the src/datapipeline folder titled "milestone2.md" as your starting point.
 
 Project Team Members: Yuyan Fan, Jing Xu, Frank Chen, Aditya Palaparthi
 Group Name: CAD-Coder
@@ -37,6 +38,3 @@ generating parts without mastering complex CAD software. Benefits over Alternati
 commercial CAD tools or plugins, our system automates code generation directly from natural inputs
 (text/images), provides open, reproducible research into model scaling, and offers a flexible,
 cloud-deployed interface for broader accessibility.
-
-
-Milestone2: Please see the detailed ReadMe file located in the src/datapipeline folder.

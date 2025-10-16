@@ -22,7 +22,6 @@ build/
 *~
 
 # Logs
-*.log
 logs/
 
 # Temporary files
