@@ -1,0 +1,237 @@
+================================================================================
+RAG Pipeline Test Run - 2025-10-15 19:16:20
+================================================================================
+
+================================================================================
+TEST 1: Metadata Retrieval Verification
+================================================================================
+
+time="2025-10-15T19:16:20-04:00" level=warning msg="/Users/aditya/Documents/apcomp215/cad-coder-nextgen/RAG_new/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+
+================================================================================
+TEST 5: Metadata Retrieval Verification
+================================================================================
+
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1760570188.594145       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+2025-10-15 23:16:28,898 - INFO - Multimodal embedding model initialized
+E0000 00:00:1760570188.899526       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+E0000 00:00:1760570189.209140       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+2025-10-15 23:16:29,504 - INFO - RAG Retriever initialized with index: cadcoder-mm-index
+2025-10-15 23:16:29,504 - INFO - Querying with text: 'CAD code...'
+E0000 00:00:1760570189.506081       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+E0000 00:00:1760570189.513155       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+E0000 00:00:1760570190.094159       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+Retrieved 5 code datapoints
+
+✅ Results with CAD code: 5
+❌ Results missing CAD code: 0
+
+✅ SUCCESS: CAD code is being stored and retrieved correctly!
+
+Example CAD code from first result:
+--------------------------------------------------------------------------------
+loop1_wp_sketch0_moveTo_1_3578947368421053__0_2210526315789474__lineTo_1_3578947368421053__0_9789473
+2025-10-15 23:16:30,322 - INFO - Retrieved 5 results
+
+
+================================================================================
+TEST 2: Single Text Query
+================================================================================
+
+time="2025-10-15T19:16:31-04:00" level=warning msg="/Users/aditya/Documents/apcomp215/cad-coder-nextgen/RAG_new/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+
+================================================================================
+TEST 1: Single Text Query
+================================================================================
+
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1760570199.240046       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+2025-10-15 23:16:39,516 - INFO - Multimodal embedding model initialized
+E0000 00:00:1760570199.516816       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+E0000 00:00:1760570199.833571       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+2025-10-15 23:16:40,135 - INFO - RAG Retriever initialized with index: cadcoder-mm-index
+2025-10-15 23:16:40,135 - INFO - Querying with text: 'Create a box with rounded corners...'
+Query: 'Create a box with rounded corners'
+
+E0000 00:00:1760570200.136174       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+E0000 00:00:1760570200.137692       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+E0000 00:00:1760570200.706238       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+2025-10-15 23:16:40,906 - INFO - Retrieved 3 results
+Retrieved 3 results:
+
+--- Result 1 ---
+ID: code_test_36_c4
+Distance: 0.3039
+Type: code
+Item ID: test_36
+CAD Code Preview:
+solid0_wp_sketch0_add_loop0__extrude_0_3515625__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_V
+
+--- Result 2 ---
+ID: code_test_12_c4
+Distance: 0.3040
+Type: code
+Item ID: test_12
+CAD Code Preview:
+solid0_wp_sketch0_add_loop0__extrude_0_0234375__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_V
+
+--- Result 3 ---
+ID: code_test_5_c4
+Distance: 0.3048
+Type: code
+Item ID: test_5
+CAD Code Preview:
+solid0_wp_sketch0_add_loop0__extrude_0_234375__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_Ve
+
+
+--------------------------------------------------------------------------------
+RAG CONTEXT (formatted for LLM):
+--------------------------------------------------------------------------------
+
+Here are relevant CAD code examples:
+
+
+--- Example 1 (Distance: 0.3039) ---
+Item ID: test_36
+Associated Image: gs___cad_coder_bucket_rag_data_test_36_png
+
+CAD Code:
+```python
+solid0_wp_sketch0_add_loop0__extrude_0_3515625__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_V
+```
+
+
+--- Example 2 (Distance: 0.3040) ---
+Item ID: test_12
+Associated Image: gs___cad_coder_bucket_rag_data_test_12_png
+
+CAD Code:
+```python
+solid0_wp_sketch0_add_loop0__extrude_0_0234375__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_V
+```
+
+
+--- Example 3 (Distance: 0.3048) ---
+Item ID: test_5
+Associated Image: gs___cad_coder_bucket_rag_data_test_5_png
+
+CAD Code:
+```python
+solid0_wp_sketch0_add_loop0__extrude_0_234375__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_Ve
+```
+
+
+
+================================================================================
+TEST 3: Multimodal Query (Text + Image)
+================================================================================
+
+time="2025-10-15T19:16:41-04:00" level=warning msg="/Users/aditya/Documents/apcomp215/cad-coder-nextgen/RAG_new/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+
+================================================================================
+TEST 4: Multimodal Query (Text + Image)
+================================================================================
+
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1760570209.758533       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+2025-10-15 23:16:50,054 - INFO - Multimodal embedding model initialized
+E0000 00:00:1760570210.055864       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+E0000 00:00:1760570210.364571       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+
+--------------------------------------------------------------------------------
+Test Case 1: Test 0 - Box with holes
+Text: 'box with holes'
+Image: gs://cad-coder-bucket/rag-data/test_0.png
+--------------------------------------------------------------------------------
+
+2025-10-15 23:16:50,708 - INFO - RAG Retriever initialized with index: cadcoder-mm-index
+2025-10-15 23:16:50,708 - INFO - Querying with text: 'box with holes' and image: gs://cad-coder-bucket/rag-data/test_0.png
+E0000 00:00:1760570210.709544       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+E0000 00:00:1760570210.710633       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+E0000 00:00:1760570211.371951       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+2025-10-15 23:16:51,557 - INFO - Retrieved 3 results
+Retrieved 3 results:
+
+1. code_test_15_c1 (distance: 0.0886)
+   Code: solid0_wp_sketch0_add_loop0__extrude_0_0625__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_Vect...
+
+2. code_test_5_c4 (distance: 0.0894)
+   Code: solid0_wp_sketch0_add_loop0__extrude_0_234375__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_Ve...
+
+3. code_test_36_c10 (distance: 0.0942)
+   Code: solid3_wp_sketch3_add_loop3__extrude__1_0__solid_solid_cut_solid3__wp_sketch4___cq_Workplane_cq_Plan...
+
+
+--------------------------------------------------------------------------------
+Sample RAG Context (for first test case):
+--------------------------------------------------------------------------------
+Here are relevant CAD code examples:
+
+
+--- Example 1 (Distance: 0.0886) ---
+Item ID: test_15
+Associated Image: gs___cad_coder_bucket_rag_data_test_15_png
+
+CAD Code:
+```python
+solid0_wp_sketch0_add_loop0__extrude_0_0625__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_Vect
+```
+
+
+--- Example 2 (Distance: 0.0894) ---
+Item ID: test_5
+Associated Image: gs___cad_coder_bucket_rag_data_test_5_png
+
+CAD Code:
+```python
+solid0_wp_sketch0_add_loop0__extrude_0_234375__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_Ve
+```
+
+
+--------------------------------------------------------------------------------
+Test Case 2: Test 1 - Cylindrical part
+Text: 'cylindrical part'
+Image: gs://cad-coder-bucket/rag-data/test_1.png
+--------------------------------------------------------------------------------
+
+2025-10-15 23:16:51,558 - INFO - Querying with text: 'cylindrical part' and image: gs://cad-coder-bucket/rag-data/test_1.png
+E0000 00:00:1760570212.175501       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+2025-10-15 23:16:52,369 - INFO - Retrieved 3 results
+Retrieved 3 results:
+
+1. code_test_12_c4 (distance: 0.1023)
+   Code: solid0_wp_sketch0_add_loop0__extrude_0_0234375__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_V...
+
+2. code_test_31_c1 (distance: 0.1025)
+   Code: solid0_wp_sketch0_add_loop0__extrude_0_1875__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_Vect...
+
+3. code_test_15_c1 (distance: 0.1061)
+   Code: solid0_wp_sketch0_add_loop0__extrude_0_0625__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_Vect...
+
+
+--------------------------------------------------------------------------------
+Test Case 3: Test 2 - Mechanical component
+Text: 'mechanical component'
+Image: gs://cad-coder-bucket/rag-data/test_2.png
+--------------------------------------------------------------------------------
+
+2025-10-15 23:16:52,370 - INFO - Querying with text: 'mechanical component' and image: gs://cad-coder-bucket/rag-data/test_2.png
+E0000 00:00:1760570212.843252       1 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+2025-10-15 23:16:53,028 - INFO - Retrieved 3 results
+Retrieved 3 results:
+
+1. code_test_15_c1 (distance: 0.1129)
+   Code: solid0_wp_sketch0_add_loop0__extrude_0_0625__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_Vect...
+
+2. code_test_12_c4 (distance: 0.1132)
+   Code: solid0_wp_sketch0_add_loop0__extrude_0_0234375__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_V...
+
+3. code_test_5_c4 (distance: 0.1179)
+   Code: solid0_wp_sketch0_add_loop0__extrude_0_234375__solid_solid0_wp_sketch1___cq_Workplane_cq_Plane_cq_Ve...
+
+
+
+================================================================================
+Test Run Complete - 2025-10-15 19:16:53
+================================================================================
