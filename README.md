@@ -2,6 +2,9 @@
 
 ## Milestone2: AC215 CAD-Coder Project MS2 Documentation: Please see the detailed markdown file located in the src/datapipeline folder titled "milestone2.md" as your starting point.
 
+## Milestone2: AC215 CAD-Coder Project MS3 Documentation: Please see the detailed markdown file located in the src/ui folder titled "ui.md" to learn about the additional modifications (added a containerized React UI) we made from Milestone2. Additionally, you can find our midterm presentation
+slides here: 
+
 Project Team Members: Yuyan Fan, Jing Xu, Frank Chen, Aditya Palaparthi
 Group Name: CAD-Coder
 
