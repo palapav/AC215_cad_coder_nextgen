@@ -1,7 +1,0 @@
-fastapi
-uvicorn
-pymongo
-pydantic
-pytest
-google-cloud-storage
-python-dotenv
