@@ -33,3 +33,8 @@ def get_all_prompts():
     """
     cursor = collection.find({}, {"prompt": 1, "_id": 0})
     return [item["prompt"] for item in cursor]
+
+if __name__ == "__main__":
+    add_record("tester", "cube", "import cadquery as cq", "gs://test/path")
+    print(get_history())
+

@@ -23,3 +23,8 @@ async def generate_cad_code(prompt: str, image=None, model_choice: str = "llava"
         return f"# LLaVA generated\nimport cadquery as cq\ncq.Workplane('XY').box(1,1,1)  # {prompt}"
     else:
         return f"# Qwen generated\nimport cadquery as cq\ncq.Workplane('XY').sphere(1)  # {prompt}"
+
+if __name__ == "__main__":
+    import asyncio
+    result = asyncio.run(generate_cad_code("make a cube", model_choice="llava"))
+    print(result)

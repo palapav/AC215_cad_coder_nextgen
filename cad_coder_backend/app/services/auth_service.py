@@ -19,3 +19,7 @@ def verify_google_token(token: str):
     except Exception as e:
         logging.error(f"Auth verification failed: {e}")
         return {"error": str(e)}
+
+if __name__ == "__main__":
+    fake_token = "your_test_token_here"
+    print(verify_google_token(fake_token))

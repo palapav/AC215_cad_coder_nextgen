@@ -20,3 +20,8 @@ def upload_cad_code(prompt: str, cad_code: str):
     blob.upload_from_filename(temp_path)
     os.remove(temp_path)
     return f"gs://{BUCKET_NAME}/{filename}"
+
+if __name__ == "__main__":
+    uri = upload_cad_code("cube_test", "import cadquery as cq\nprint('Cube')")
+    print(uri)
+

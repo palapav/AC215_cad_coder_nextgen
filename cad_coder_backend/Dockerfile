@@ -11,9 +11,9 @@
     RUN pip install --no-cache-dir -r requirements.txt
     
     # ---------- Environment ----------
-    # Load Google Cloud credentials if available
-    COPY secrets/data-service-account.json /app/secrets/data-service-account.json
-    ENV GOOGLE_APPLICATION_CREDENTIALS="/app/secrets/data-service-account.json"
+    # Load Google Cloud credentials
+    #COPY secrets/data-service-account.json /app/secrets/data-service-account.json
+    #ENV GOOGLE_APPLICATION_CREDENTIALS="/app/secrets/data-service-account.json"
     
     # Expose FastAPI port
     EXPOSE 8000
