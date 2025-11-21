@@ -112,44 +112,97 @@ export function AIModelSandbox() {
     setCurrentSessionId(initialSession.id);
   }
   
+  const normalizedModel =
+  selectedModel === "baseline-llava" ? "llava" :
+  selectedModel === "qwen-2.5-xb" ? "qwen" :
+  selectedModel;
+
   const handleSendMessage = async (content: string, image?: string) => {
     if (!currentSessionId) return;
-
+  
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content,
       timestamp: new Date(),
-      image
+      image,
     };
-    
-    // Update current session with new message
-    setSessions(prev => prev.map(session => 
-      session.id === currentSessionId 
-        ? { ...session, messages: [...session.messages, userMessage] }
-        : session
-    ));
-    
+  
+    // Add the user message to the session
+    setSessions(prev =>
+      prev.map(session =>
+        session.id === currentSessionId
+          ? { ...session, messages: [...session.messages, userMessage] }
+          : session
+      )
+    );
+  
     setIsGenerating(true);
-    
-    // Simulate AI response delay
-    setTimeout(() => {
+  
+    try {
+      // ✅ Call your FastAPI /generate_cad endpoint
+      const response = await fetch("http://localhost:8000/generate_cad", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: content,
+          image_path: image || null,
+          user_id: "default",
+          model_choice: normalizedModel,  // must be "llava" or "qwen"
+          rag_context: null
+        }),
+      });
+  
+      // Parse the backend response
+      const data = await response.json();
+      console.log("Backend raw response:", data);
+  
+      // ✅ Safely extract CAD code from response
+      const backendOutput =
+        data.cad_code ||
+        data.generated_code ||
+        data.output ||
+        data.result ||
+        "⚙️ Backend responded but no CAD code field found.";
+  
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: generateMockResponse(content, selectedModel, !!image),
+        content: backendOutput,
         timestamp: new Date(),
-        model: getModelName(selectedModel)
+        model: getModelName(selectedModel),
       };
-      
-      setSessions(prev => prev.map(session => 
-        session.id === currentSessionId 
-          ? { ...session, messages: [...session.messages, assistantMessage] }
-          : session
-      ));
+  
+      // Add assistant reply to the current chat session
+      setSessions(prev =>
+        prev.map(session =>
+          session.id === currentSessionId
+            ? { ...session, messages: [...session.messages, assistantMessage] }
+            : session
+        )
+      );
+    } catch (error) {
+      console.error("Error contacting backend:", error);
+      const errorMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        role: "assistant",
+        content:
+          "❌ Failed to reach backend or received an invalid response. Please try again.",
+        timestamp: new Date(),
+        model: getModelName(selectedModel),
+      };
+      setSessions(prev =>
+        prev.map(session =>
+          session.id === currentSessionId
+            ? { ...session, messages: [...session.messages, errorMessage] }
+            : session
+        )
+      );
+    } finally {
       setIsGenerating(false);
-    }, 1000 + Math.random() * 2000); // Random delay between 1-3 seconds
+    }
   };
+  
   
   const clearChat = () => {
     if (!currentSessionId) return;
