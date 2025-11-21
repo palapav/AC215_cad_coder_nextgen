@@ -13,18 +13,18 @@ services:
   backend:
     build: .
     container_name: cadcoder-backend
-    env_file: .env               #Load backend environment automatically
+    env_file: .env
     ports:
       - "8000:8000"
     volumes:
+      - ./app:/app/app        # ⭐⭐⭐ 挂载你的代码
       - ./secrets:/app/secrets
     depends_on:
       - mongo
     restart: always
 
-  # Optional pipeline services (run on demand)
   ingestion:
-    build: ../src/datapipeline/data_ingestion
+    build: ../datapipeline/data_ingestion
     container_name: cadcoder-ingestion
     env_file: .env
     volumes:
@@ -32,7 +32,7 @@ services:
     command: ["python", "dataloader.py"]
 
   preprocess:
-    build: ../src/datapipeline/data_preprocessing
+    build: ../datapipeline/data_preprocessing
     container_name: cadcoder-preprocess
     env_file: .env
     volumes:
@@ -40,7 +40,7 @@ services:
     command: ["python", "preprocess_cv.py"]
 
   rag:
-    build: ../src/datapipeline/rag
+    build: ../datapipeline/rag
     container_name: cadcoder-rag
     env_file: .env
     volumes:
