@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:6
+    container_name: cadcoder-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: always
+
+  backend:
+    build: .
+    container_name: cadcoder-backend
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app        # ⭐⭐⭐ 挂载你的代码
+      - ./secrets:/app/secrets
+    depends_on:
+      - mongo
+    restart: always
+
+  # ingestion:
+  #   build: ../datapipeline/data_ingestion
+  #   container_name: cadcoder-ingestion
+  #   env_file: .env
+  #   volumes:
+  #     - ../data:/app/data
+  #   command: ["python", "dataloader.py"]
+
+  preprocess:
+    build: ../datapipeline/data_preprocessing
+    container_name: cadcoder-preprocess
+    env_file: .env
+    volumes:
+      - ../data:/app/data
+    command: ["python", "preprocess_cv.py"]
+
+  rag:
+    build: ../datapipeline/rag
+    container_name: cadcoder-rag
+    env_file: .env
+    volumes:
+      - ../data:/app/data
+    command: ["python", "pipeline.py"]
+  
+  inference:
+    build:
+      context: ./model_inference
+      dockerfile: Dockerfile
+    depends_on:
+      - preprocess
+    volumes:
+      - ./data:/data  # Ensure the data is shared
+    entrypoint: /bin/sh -c  # Allows multiple commands to run in sequence
+    command: >
+      ./scripts/v1_5/eval/test_gencadcode.sh "CADCODER/CAD-Coder" "dataset" && 
+      python scripts/generate_model_cad.py --dataset_name dataset --model_tested CADCODER/CAD-Coder --code_language cadquery --pc_reps 3 --parallel
+
+
+volumes:
+  mongo_data:

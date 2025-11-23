@@ -1,0 +1,36 @@
+# Authentication files - NEVER commit these
+key.json
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Data (if any local copies)
+data/
+raw_data/
+processed_data/
+
