@@ -1,0 +1,38 @@
+services:
+  # Validation service - runs first to check authentication
+  validate:
+    build:
+      context: ..
+      dockerfile: Dockerfile.validate
+    container_name: cad-validate
+    volumes:
+      - ../key.json:/app/key.json:ro
+    env_file:
+      - ../.env
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/key.json
+
+  # Ingestion service - runs after validation passes
+  ingestion:
+    build: .
+    container_name: cad-ingestion-test
+    depends_on:
+      validate:
+        condition: service_completed_successfully
+    volumes:
+      # Mount centralized service account key
+      - ../key.json:/app/key.json:ro
+    env_file:
+      # Load credentials from centralized .env
+      - ../.env
+    environment:
+      # Override key path for container
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/key.json
+    command: [
+      "python", "dataloader.py",
+      "--bucket", "${GCS_BUCKET:-cad-coder-nextgen-data}",
+      "--splits", "${INGESTION_SPLITS:-test}",
+      "--limit", "${INGESTION_LIMIT:-5}"
+    ]
+    network_mode: host
+
