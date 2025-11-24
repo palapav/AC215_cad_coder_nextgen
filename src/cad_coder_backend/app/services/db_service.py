@@ -1,12 +1,33 @@
 from pymongo import MongoClient
 from datetime import datetime
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # MongoDB setup
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongo:27017")
 DB_NAME = os.getenv("MONGO_DB", "cad_coder")
 
-client = MongoClient(MONGO_URI)
+# Log connection info (masked for security)
+if "@" in MONGO_URI:
+    masked_uri = MONGO_URI.split("@")[0].split("://")[0] + "://****@" + MONGO_URI.split("@")[1].split("/")[0] if "@" in MONGO_URI else MONGO_URI
+else:
+    masked_uri = MONGO_URI
+print(f"[DB Service] Connecting to MongoDB: {masked_uri}")
+print(f"[DB Service] Database: {DB_NAME}")
+
+try:
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    # Test connection
+    client.server_info()
+    print(f"[DB Service] ✅ Successfully connected to MongoDB")
+except Exception as e:
+    print(f"[DB Service] ⚠️  MongoDB connection warning: {e}")
+    # Still create client, but connection will fail on first use
+    client = MongoClient(MONGO_URI)
+
 db = client[DB_NAME]
 collection = db["history"]
 

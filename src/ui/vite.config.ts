@@ -55,6 +55,7 @@
     },
     server: {
       port: 3000,
-      open: true,
+      open: false,  // Disable auto-open (causes error in Docker)
+      host: '0.0.0.0',  // Allow external connections
     },
   });
