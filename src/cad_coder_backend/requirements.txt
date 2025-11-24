@@ -1,12 +1,23 @@
-fastapi==0.115.0
-uvicorn==0.32.0
-pydantic==2.8.2
+fastapi==0.115.13
+uvicorn==0.34.3
+pydantic==2.11.7
 pytest==8.3.2
 pymongo==4.9.0
 google-cloud-storage==2.17.0
-python-dotenv==1.0.1
+python-dotenv==1.1.0
 google-auth==2.34.0
 google-auth-oauthlib==1.2.1
-httpx==0.27.0
+httpx==0.28.1
 setuptools>=68.0.0
 wheel>=0.41.0
+# Qwen dependencies - matching working environment versions
+# torch 2.6.0+cu124 already in base image (CUDA 12.4 backward compatible with 12.3)
+transformers==4.57.1
+pillow==10.3.0
+accelerate==1.8.0
+qwen-vl-utils==0.0.11
+peft==0.17.1
+bitsandbytes==0.46.0
+# Optional but recommended for Qwen models
+sentencepiece==0.2.0
+tokenizers==0.22.1

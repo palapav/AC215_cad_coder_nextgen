@@ -18,6 +18,20 @@ app = FastAPI(
     description="Backend for CAD-Coder supporting model selection, RAG, and pipeline control.",
 )
 
+# ---------- Startup Event: Pre-load Qwen model (optional, lazy loading also works) ----------
+@app.on_event("startup")
+async def startup_event():
+    """Initialize Qwen model on startup (optional - lazy loading also works)"""
+    try:
+        # Pre-initialize Qwen model for faster first request
+        from app.services.model_service import _get_qwen_service
+        print("[Startup] Pre-initializing Qwen model...")
+        _get_qwen_service()
+        print("[Startup] ✓ Qwen model ready")
+    except Exception as e:
+        print(f"[Startup] ⚠️ Qwen model initialization skipped: {e}")
+        print("[Startup] Model will be loaded on first use (lazy loading)")
+
 # ---------- CORS (for React frontend) ----------
 origins = [
     os.getenv("FRONTEND_ORIGIN", "http://localhost:3000"),

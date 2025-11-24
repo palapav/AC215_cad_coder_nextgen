@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ModelSelector } from "./ModelSelector";
 import { ChatHistory } from "./ChatHistory";
 import { ChatInput } from "./ChatInput";
@@ -14,10 +14,10 @@ const MODEL_RESPONSES: Record<string, string[]> = {
     "I'm Baseline-LLaVA, designed to understand both visual and textual content. How can I assist you today?",
     "Hi! I'm Baseline-LLaVA, ready to help with multimodal tasks involving text and images."
   ],
-  "qwen-2.5-xb": [
-    "Hello! I'm Qwen-2.5-xB, specializing in advanced reasoning and code generation. What would you like to work on?",
-    "I'm Qwen-2.5-xB, designed for complex problem-solving and coding tasks. How can I help you today?",
-    "Hi! I'm Qwen-2.5-xB, ready to assist with sophisticated reasoning and development challenges."
+  "qwen3-vl-2b": [
+    "Hello! I'm Qwen3-VL-2B-Instruct, a vision-language model fine-tuned for CAD code generation. What would you like to work on?",
+    "I'm Qwen3-VL-2B-Instruct, designed for complex problem-solving and CAD code generation tasks. How can I help you today?",
+    "Hi! I'm Qwen3-VL-2B-Instruct, ready to assist with CAD code generation and technical challenges."
   ]
 };
 
@@ -28,10 +28,10 @@ const MULTIMODAL_RESPONSES: Record<string, string[]> = {
     "Thanks for the image! I can examine visual details and provide comprehensive analysis of what I observe in the image.",
     "I'm analyzing the visual content you've provided. My vision-language capabilities allow me to understand both the visual elements and their context."
   ],
-  "qwen-2.5-xb": [
-    "I can see the image you've uploaded. As Qwen-2.5-xB, I can analyze visual content and provide detailed technical insights.",
-    "Thanks for sharing the image! I can process visual information and provide thorough analysis, especially for technical or code-related content.",
-    "I'm examining the image you've provided. Let me analyze the visual elements and provide comprehensive feedback."
+  "qwen3-vl-2b": [
+    "I can see the image you've uploaded. As Qwen3-VL-2B-Instruct, I can analyze visual content and generate CAD code based on what I see.",
+    "Thanks for sharing the image! I can process visual information and generate CadQuery code to recreate the CAD model shown.",
+    "I'm examining the image you've provided. Let me analyze the visual elements and generate the appropriate CAD code."
   ]
 };
 
@@ -48,7 +48,7 @@ export function AIModelSandbox() {
   const getModelName = (modelId: string) => {
     const modelNames: Record<string, string> = {
       "baseline-llava": "Baseline-LLaVA",
-      "qwen-2.5-xb": "Qwen-2.5-xB"
+      "qwen3-vl-2b": "Qwen3-VL-2B-Instruct"
     };
     return modelNames[modelId] || modelId;
   };
@@ -99,6 +99,17 @@ export function AIModelSandbox() {
     setCurrentSessionId(sessionId);
   };
 
+  // Update current session's model when model selection changes
+  useEffect(() => {
+    if (currentSessionId) {
+      setSessions(prev => prev.map(session => 
+        session.id === currentSessionId 
+          ? { ...session, model: getModelName(selectedModel) }
+          : session
+      ));
+    }
+  }, [selectedModel, currentSessionId]);
+
   // Create initial session if none exists
   if (sessions.length === 0 && !currentSessionId) {
     const initialSession: ChatSession = {
@@ -114,16 +125,19 @@ export function AIModelSandbox() {
   
   const normalizedModel =
   selectedModel === "baseline-llava" ? "llava" :
-  selectedModel === "qwen-2.5-xb" ? "qwen" :
+  selectedModel === "qwen3-vl-2b" ? "qwen" :
   selectedModel;
 
   const handleSendMessage = async (content: string, image?: string) => {
     if (!currentSessionId) return;
   
+    // Ensure we have either content or image
+    const messageContent = content.trim() || (image ? "Generate CAD code for this image" : "");
+    
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content,
+      content: messageContent,
       timestamp: new Date(),
       image,
     };
@@ -141,16 +155,22 @@ export function AIModelSandbox() {
   
     try {
       // ✅ Call your FastAPI /generate_cad endpoint
+      const requestBody = {
+        prompt: messageContent,
+        image_path: image || null,
+        user_id: "default",
+        model_choice: normalizedModel,  // must be "llava" or "qwen"
+        rag_context: null
+      };
+      
+      console.log("[Frontend] Selected model:", selectedModel);
+      console.log("[Frontend] Normalized model:", normalizedModel);
+      console.log("[Frontend] Request body:", requestBody);
+      
       const response = await fetch("http://localhost:8000/generate_cad", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: content,
-          image_path: image || null,
-          user_id: "default",
-          model_choice: normalizedModel,  // must be "llava" or "qwen"
-          rag_context: null
-        }),
+        body: JSON.stringify(requestBody),
       });
   
       // Parse the backend response

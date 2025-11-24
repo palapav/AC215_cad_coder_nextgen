@@ -2,7 +2,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 const AI_MODELS = [
   { id: "baseline-llava", name: "Baseline-LLaVA", description: "Baseline VLM for CAD code generation" },
-  { id: "qwen-2.5-xb", name: "Qwen-2.5-xB", description: "Next-gen VLM for CAD code generation (x billion # of parameters)" },
+  { id: "qwen3-vl-2b", name: "Qwen3-VL-2B-Instruct", description: "Qwen3 Vision-Language model (2B parameters) fine-tuned for CAD code generation" },
 ];
 
 interface ModelSelectorProps {
