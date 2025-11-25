@@ -8,16 +8,9 @@ python-dotenv==1.1.0
 google-auth==2.34.0
 google-auth-oauthlib==1.2.1
 httpx==0.28.1
+modal-client>=0.60.0
+pillow==10.3.0  # For image processing in modal_client
 setuptools>=68.0.0
 wheel>=0.41.0
-# Qwen dependencies - matching working environment versions
-# torch 2.6.0+cu124 already in base image (CUDA 12.4 backward compatible with 12.3)
-transformers==4.57.1
-pillow==10.3.0
-accelerate==1.8.0
-qwen-vl-utils==0.0.11
-peft==0.17.1
-bitsandbytes==0.46.0
-# Optional but recommended for Qwen models
-sentencepiece==0.2.0
-tokenizers==0.22.1
+# Note: Heavy ML dependencies (transformers, accelerate, torch, etc.) are NOT needed here
+# since all model inference runs on Modal GPU workers, not in this backend container

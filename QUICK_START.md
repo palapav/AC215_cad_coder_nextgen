@@ -4,7 +4,8 @@
 
 ```bash
 cd src/cad_coder_backend
-docker compose up -d
+# start only the services needed for API + DB
+docker compose up -d backend mongo
 ```
 
 Backend runs at: http://localhost:8000
@@ -46,5 +47,13 @@ docker compose -f docker-compose.dev.yml down
 # Frontend Production
 docker stop cad-coder-ui-container
 docker rm cad-coder-ui-container
+```
+
+## Optional: Run data preprocessing / RAG (when needed)
+These services are disabled by default. Run them only when you need to refresh the LLaVA baseline artifacts:
+
+```bash
+cd src/cad_coder_backend
+docker compose --profile pipeline up preprocess rag
 ```
 

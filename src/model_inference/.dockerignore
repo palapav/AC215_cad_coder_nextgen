@@ -1,0 +1,33 @@
+# Exclude large model checkpoints (these are in Modal volumes)
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+
+# Exclude test images (not needed in container)
+*.png
+*.jpg
+*.jpeg
+
+# Exclude Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Exclude data files
+*.jsonl
+*.step
+*.stl
+*.glb
+
+# Exclude git
+.git/
+.gitignore
+
+# Exclude build artifacts
+build/
+dist/
+*.egg-info/
+

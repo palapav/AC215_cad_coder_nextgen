@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Model loading utilities with memory-efficient optimizations"""
 import torch
-from transformers import AutoModelForImageTextToText, AutoProcessor, AutoConfig
 
 
 def load_model(
@@ -73,22 +72,32 @@ def load_model(
         except (ImportError, AttributeError, ValueError, RuntimeError) as e2:
             # Try generic AutoModel
             try:
+                from transformers import AutoModelForImageTextToText
+            except ImportError:
+                AutoModelForImageTextToText = None
+
+            if AutoModelForImageTextToText is None:
+                raise ImportError(
+                    "AutoModelForImageTextToText is not available in this transformers release."
+                )
+
+            try:
                 model = AutoModelForImageTextToText.from_pretrained(
                     model_name,
                     **model_kwargs
                 )
-                print(f"✓ Loaded AutoModelForImageTextToText")
+                print("✓ Loaded AutoModelForImageTextToText")
                 return model
-            except Exception as e3:
+            except Exception:
                 # Last resort: remove flash attention and try again
                 if "attn_implementation" in model_kwargs:
-                    print(f"ℹ️ Retrying without flash attention")
+                    print("ℹ️ Retrying without flash attention")
                     model_kwargs.pop("attn_implementation")
                     model = AutoModelForImageTextToText.from_pretrained(
                         model_name,
                         **model_kwargs
                     )
-                    print(f"✓ Loaded AutoModelForImageTextToText (standard attention)")
+                    print("✓ Loaded AutoModelForImageTextToText (standard attention)")
                     return model
                 raise
 

@@ -65,3 +65,23 @@ MongoDB UI → localhost:27017 (if needed)
 
 Trigger Pipelines
 curl -X POST http://localhost:8000/pipeline/preprocess
+```
+
+## ☁️ Modal-backed Qwen inference
+To offload Qwen-3 inference to Modal GPUs:
+- Install Modal locally (`pip install modal-client`), run `python -m modal setup`, and upload the checkpoint with:
+  ```bash
+  modal volume create cad-coder-qwen3-model
+  modal volume put cad-coder-qwen3-model src/model_inference/qwen/final_model.pt:/final_model.pt
+  ```
+- Deploy the worker: `modal deploy ../model_inference/qwen/modal_app.py`.
+- Add the following to `src/.env` (values shown are defaults):
+  ```
+  QWEN_INFERENCE_BACKEND=modal
+  QWEN_MODAL_APP=cad-coder-qwen3
+  QWEN_MODAL_FUNCTION=qwen_modal_infer
+  QWEN_MODAL_MAX_NEW_TOKENS=2048
+  MODAL_TOKEN_ID=...   # from python -m modal setup
+  MODAL_TOKEN_SECRET=...
+  ```
+- Restart the backend container. Requests to `/generate_cad` using `model_choice="qwen"` now invoke Modal and stream back the CAD code once the remote GPU finishes.

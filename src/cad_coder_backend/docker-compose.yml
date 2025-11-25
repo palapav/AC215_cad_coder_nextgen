@@ -18,65 +18,49 @@ services:
       - ./app:/app/app        # ⭐⭐⭐ 挂载你的代码
       - ./secrets:/app/secrets
       - ../.env:/app/.env       # Mount .env file from src/ directory
-      - ../model_inference/qwen:/app/model_inference/qwen  # Mount Qwen model directory
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    # depends_on:              # Commented out - only needed if using local MongoDB
-    #   - mongo                # Remove this if using MongoDB Atlas
+      # Note: Qwen model directory NOT mounted - inference runs on Modal GPU workers
+    # Note: GPU not required for backend - all model inference runs on Modal
     # depends_on:              # Commented out - only needed if using local MongoDB
     #   - mongo                # Remove this if using MongoDB Atlas
     restart: always
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]  # Dev mode with hot reload
 
-  ingestion:
-    build: ../datapipeline/data_ingestion
-    container_name: cadcoder-ingestion
-    env_file: ../.env  # Use .env from parent src/ directory
-    volumes:
-      - ../data:/app/data
-    command: ["python", "dataloader.py"]
-
   preprocess:
+    profiles: ["pipeline"]  # Only build/run when explicitly requested
     build: ../datapipeline/data_preprocessing
     container_name: cadcoder-preprocess
     env_file: ../.env  # Use .env from parent src/ directory
-    volumes:
-      - ../data:/app/data
+    # No data volumes mounted; container operates purely on code
     command: ["python", "preprocess_cv.py"]
 
   rag:
+    profiles: ["pipeline"]  # Only build/run when explicitly requested
     build: ../datapipeline/rag
     container_name: cadcoder-rag
     env_file: ../.env  # Use .env from parent src/ directory
-    volumes:
-      - ../data:/app/data
+    # No data volumes mounted; container operates purely on code
     command: ["python", "pipeline.py"]
   
-  # Model inference service (requires GPU and model checkpoints)
-  inference:
-    build:
-      context: ../model_inference
-      dockerfile: Dockerfile
-    depends_on:
-      - preprocess
-    volumes:
-      - ../data:/data
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    entrypoint: /bin/sh -c
-    command: >
-      ./scripts/v1_5/eval/test_gencadcode.sh "CADCODER/CAD-Coder" "dataset" && 
-      python scripts/generate_model_cad.py --dataset_name dataset --model_tested CADCODER/CAD-Coder --code_language cadquery --pc_reps 3 --parallel
+  # Model inference service - DISABLED: Using Modal for GPU inference instead
+  # inference:
+  #   build:
+  #     context: ../model_inference
+  #     dockerfile: Dockerfile
+  #   depends_on:
+  #     - preprocess
+  #   volumes:
+  #     - ../data:/data
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #   entrypoint: /bin/sh -c
+  #   command: >
+  #     ./scripts/v1_5/eval/test_gencadcode.sh "CADCODER/CAD-Coder" "dataset" && 
+  #     python scripts/generate_model_cad.py --dataset_name dataset --model_tested CADCODER/CAD-Coder --code_language cadquery --pc_reps 3 --parallel
 
 volumes:
   mongo_data:

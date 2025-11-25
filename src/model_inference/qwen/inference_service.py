@@ -132,20 +132,22 @@ def generate_cad_code(
     # Process inputs - match eval_model.py exactly (lines 22-31)
     texts = _processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     
-    # Match eval_model.py line 23 exactly - process_vision_info called unconditionally when image exists
-    if image is not None:
-        image_inputs, video_inputs = process_vision_info(messages)
-    else:
-        image_inputs, video_inputs = [], []
+    # Match eval_model.py line 23 exactly - process_vision_info called unconditionally
+    image_inputs, video_inputs = process_vision_info(messages)
     
     # Match eval_model.py lines 25-31 exactly
-    inputs = _processor(
-        text=texts,
-        images=image_inputs,
-        videos=video_inputs,
-        padding=True,
-        return_tensors="pt"
-    )
+    # Only pass images/videos if they're not empty (newer transformers versions crash on empty lists)
+    processor_kwargs = {
+        "text": texts,
+        "padding": True,
+        "return_tensors": "pt"
+    }
+    if image_inputs:
+        processor_kwargs["images"] = image_inputs
+    if video_inputs:
+        processor_kwargs["videos"] = video_inputs
+    
+    inputs = _processor(**processor_kwargs)
     
     # Match eval_model.py lines 33-38 exactly for device detection
     if hasattr(_model, 'device'):

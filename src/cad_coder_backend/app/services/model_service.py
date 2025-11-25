@@ -17,28 +17,49 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 MODEL_INFERENCE_DIR = PROJECT_ROOT / "src" / "model_inference"
 QWEN_DIR = MODEL_INFERENCE_DIR / "qwen"
 
-# Fallback: Check if qwen is mounted directly at /app/model_inference/qwen (Docker)
-if not QWEN_DIR.exists():
-    docker_qwen_path = Path("/app/model_inference/qwen")
-    if docker_qwen_path.exists():
-        QWEN_DIR = docker_qwen_path
-        print(f"[Model Service] Using Docker-mounted Qwen path: {QWEN_DIR}")
+# Check if Modal is enabled (model files not needed when using Modal)
+QWEN_INFERENCE_BACKEND = os.getenv("QWEN_INFERENCE_BACKEND", "local").lower()
+_modal_enabled = QWEN_INFERENCE_BACKEND == "modal"
 
-# Add qwen directory to path for imports
-if str(QWEN_DIR) not in sys.path:
-    sys.path.insert(0, str(QWEN_DIR))
+# Only set up local paths if Modal is not enabled or if directory exists
+if not _modal_enabled:
+    # Fallback: Check if qwen is mounted directly at /app/model_inference/qwen (Docker)
+    if not QWEN_DIR.exists():
+        docker_qwen_path = Path("/app/model_inference/qwen")
+        if docker_qwen_path.exists():
+            QWEN_DIR = docker_qwen_path
+            print(f"[Model Service] Using Docker-mounted Qwen path: {QWEN_DIR}")
+    
+    # Add qwen directory to path for imports (only if using local inference)
+    if QWEN_DIR.exists() and str(QWEN_DIR) not in sys.path:
+        sys.path.insert(0, str(QWEN_DIR))
+else:
+    print(f"[Model Service] Modal inference enabled - local model files not required")
 
 models = {
     "llava": MODEL_INFERENCE_DIR,
     "qwen": QWEN_DIR
 }
 
+_modal_init_error = None
+
+if _modal_enabled:
+    try:
+        from app.services.modal_client import run_modal_qwen_inference, ModalConfigError
+    except Exception as exc:  # pragma: no cover - import errors handled at runtime
+        _modal_init_error = exc
+        _modal_enabled = False
+        print(f"[Model Service] ⚠️ Modal client disabled: {exc}")
+
 # Lazy load Qwen service
 _qwen_service = None
 
 def _get_qwen_service():
-    """Lazy load Qwen inference service"""
+    """Lazy load Qwen inference service (only used when Modal is disabled)"""
     global _qwen_service
+    if _modal_enabled:
+        raise RuntimeError("Local Qwen service not available when Modal inference is enabled. Use Modal backend instead.")
+    
     if _qwen_service is None:
         try:
             print(f"[Model Service] QWEN_DIR: {QWEN_DIR}")
@@ -126,9 +147,28 @@ async def generate_cad_code(prompt: str, image=None, model_choice: str = "llava"
     if model_choice not in models:
         model_choice = "llava"
     
+    if model_choice == "qwen":
+        if _modal_enabled:
+            max_tokens = int(os.getenv("QWEN_MODAL_MAX_NEW_TOKENS", "2048") or 2048)
+            modal_temperature = float(os.getenv("QWEN_MODAL_TEMPERATURE", "0.0") or 0.0)
+            try:
+                return await run_modal_qwen_inference(
+                    prompt=prompt,
+                    image=image,
+                    max_new_tokens=max_tokens,
+                    temperature=modal_temperature,
+                )
+            except Exception as exc:
+                print(f"[Model Service] ⚠️ Modal inference failed: {exc}")
+                if isinstance(exc, ModalConfigError):
+                    raise RuntimeError(f"Modal configuration error: {exc}") from exc
+                raise RuntimeError(f"Modal inference failed: {exc}") from exc
+        else:
+            print("[Model Service] ⚠️ Qwen requested but Modal backend disabled; falling back to placeholder response.")
+
     model_path = models[model_choice]
     
-    # Check if model_inference directory exists
+    # Check if model_inference directory exists (only relevant for llava or local qwen)
     if not model_path.exists():
         # Fallback to placeholder if model_inference not available
         if model_choice == "llava":
@@ -188,8 +228,8 @@ async def generate_cad_code(prompt: str, image=None, model_choice: str = "llava"
             # Log error but fall through to placeholder
             print(f"Inference error: {e}")
     
-    # Try Qwen inference if selected
-    if model_choice == "qwen":
+    # Try Qwen inference if selected (only if Modal is not enabled)
+    if model_choice == "qwen" and not _modal_enabled:
         try:
             qwen_service = _get_qwen_service()
             if qwen_service:

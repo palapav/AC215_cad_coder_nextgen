@@ -1,0 +1,54 @@
+# Exclude large model files and checkpoints
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+
+# Exclude model inference directory (not needed - using Modal)
+../model_inference/
+
+# Exclude test images and large data files
+*.png
+*.jpg
+*.jpeg
+*.step
+*.stl
+*.glb
+
+# Exclude Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Exclude virtual environments
+env/
+venv/
+ENV/
+.venv
+
+# Exclude IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Exclude git
+.git/
+.gitignore
+
+# Exclude data directories
+../data/
+*.jsonl
+
+# Exclude node_modules if any
+node_modules/
+
+# Exclude build artifacts
+build/
+dist/
+*.egg-info/
+

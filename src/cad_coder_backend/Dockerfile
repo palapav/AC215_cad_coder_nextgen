@@ -1,10 +1,8 @@
-# ---------- Base Image with PyTorch and CUDA support ----------
-# Using PyTorch 2.6.0 matching working environment
-# Note: Using cu124 (CUDA 12.4) which is backward compatible with CUDA 12.3
-# Original environment: torch 2.6.0+cu124, current machine: CUDA 12.3
-FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+# ---------- Base Image ----------
+# Using Python slim image - no PyTorch/CUDA needed since model inference runs on Modal
+FROM python:3.11-slim
 
-# Install system dependencies for image processing
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3-dev \
     libjpeg-dev \

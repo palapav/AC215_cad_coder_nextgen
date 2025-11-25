@@ -75,6 +75,38 @@ Note: If instead of testing pre-trained CAD-Coder you want to test your own mode
 
 TODO: Add capability/instructions for live chat with the model.
 
+## Modal GPU Inference (Qwen-3 fine-tune)
+We now support running the fine-tuned Qwen-3 model on Modal Labs GPUs and invoking it through the FastAPI backend.
+
+1. **Install & authenticate Modal locally**
+   ```bash
+   pip install modal-client
+   python -m modal setup         # completes browser auth and stores MODAL_TOKEN_ID/SECRET
+   ```
+2. **Create a Modal volume and upload the checkpoint (8.5GB) once**
+   ```bash
+   modal volume create cad-coder-qwen3-model
+   modal volume put cad-coder-qwen3-model src/model_inference/qwen/final_model.pt:/final_model.pt
+   ```
+3. **Deploy the GPU worker (A10G, 24GB VRAM)**
+   ```bash
+   modal deploy src/model_inference/qwen/modal_app.py
+   # optional sanity check
+   modal run src/model_inference/qwen/modal_app.py --prompt "generate a cube"
+   ```
+4. **Configure the backend (`src/.env`)**
+   ```
+   MODAL_TOKEN_ID=...
+   MODAL_TOKEN_SECRET=...
+   QWEN_INFERENCE_BACKEND=modal
+   QWEN_MODAL_APP=cad-coder-qwen3
+   QWEN_MODAL_FUNCTION=qwen_modal_infer
+   QWEN_MODAL_VOLUME=cad-coder-qwen3-model
+   QWEN_MODAL_MAX_NEW_TOKENS=2048
+   ```
+5. **Restart the FastAPI backend (`docker compose up --build` inside `src/cad_coder_backend`).**
+   Every `/generate_cad` request that selects the Qwen model now calls the Modal GPU instead of trying to load the checkpoint locally.
+
 ## Training CAD-Coder
 
 ### Phase 1 Training
