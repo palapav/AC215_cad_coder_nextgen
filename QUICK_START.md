@@ -11,6 +11,35 @@ docker compose up -d backend mongo
 Backend runs at: http://localhost:8000
 - Code changes auto-reload (--reload flag enabled)
 
+### Configure Modal GPU inference (Qwen)
+1. **Modal CLI setup (once per developer)**
+   ```bash
+   pip install modal
+   modal token new              # log in via browser, stores credentials locally
+   modal volume put cad-coder-qwen3-model src/model_inference/qwen/final_model.pt:/final_model.pt
+   modal deploy src/model_inference/qwen/modal_app.py
+   ```
+2. **Environment variables (`src/.env`)**
+   ```
+   MODAL_TOKEN_ID=...
+   MODAL_TOKEN_SECRET=...
+   QWEN_INFERENCE_BACKEND=modal
+   QWEN_MODAL_APP=cad-coder-qwen3
+   QWEN_MODAL_FUNCTION=qwen_modal_infer
+   QWEN_MODAL_MAX_NEW_TOKENS=4096
+   QWEN_MODAL_TEMPERATURE=0.0
+   ```
+3. **Rebuild backend after editing `.env`**
+   ```bash
+   docker compose down
+   docker compose up -d --build backend mongo
+   ```
+4. **Sanity check (from `src/cad_coder_backend`)**
+   ```bash
+   bash test.sh
+   ```
+   You should see a JSON response with real CAD code generated via Modal. The frontend/API now uses Modal GPUs automatically when `model_choice="qwen"`.
+
 ## Start Frontend
 
 ### Option 1: Dev Mode (Recommended - Hot Reload)

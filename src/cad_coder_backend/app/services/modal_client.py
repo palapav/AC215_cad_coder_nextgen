@@ -16,9 +16,20 @@ class ModalConfigError(RuntimeError):
     """Raised when Modal lookup fails due to missing configuration."""
 
 
+def _ensure_modal_credentials() -> None:
+    """Validate Modal tokens exist in environment."""
+    token_id = os.getenv("MODAL_TOKEN_ID")
+    token_secret = os.getenv("MODAL_TOKEN_SECRET")
+    if not token_id or not token_secret:
+        raise ModalConfigError(
+            "MODAL_TOKEN_ID and MODAL_TOKEN_SECRET must be set for Modal inference."
+        )
+
+
 @lru_cache(maxsize=1)
 def _lookup_modal_function() -> modal.functions.FunctionHandle:
     """Resolve the remote Modal function handle once."""
+    _ensure_modal_credentials()
     app_name = os.getenv("QWEN_MODAL_APP", "cad-coder-qwen3")
     function_name = os.getenv("QWEN_MODAL_FUNCTION", "qwen_modal_infer")
 
@@ -28,7 +39,7 @@ def _lookup_modal_function() -> modal.functions.FunctionHandle:
         )
 
     try:
-        return modal.Function.lookup(app_name, function_name)
+        return modal.Function.from_name(app_name, function_name)
     except Exception as exc:  # pragma: no cover - network errors bubble up
         raise ModalConfigError(
             f"Unable to look up Modal function {function_name!r} in app {app_name!r}: {exc}"
@@ -83,7 +94,7 @@ async def run_modal_qwen_inference(
     image_bytes, image_format = _serialize_image(image)
 
     def _call_remote() -> str:
-        return fn_handle.call(
+        return fn_handle.remote(
             prompt=prompt,
             image_bytes=image_bytes,
             image_format=image_format,
