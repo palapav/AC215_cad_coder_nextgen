@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os
 
 # Import routers
-from app.routers import generate, history, health, auth, pipeline
+from app.routers import generate, history, health, auth, pipeline,upload
 from app.services.utils import setup_logging
 
 # ✅ Load environment variables early
@@ -22,6 +22,8 @@ app = FastAPI(
 origins = [
     os.getenv("FRONTEND_ORIGIN", "http://localhost:3000"),
     "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    "*",  # Allow all origins for Modal deployment (restrict in production)
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -37,6 +39,7 @@ app.include_router(history.router)
 app.include_router(health.router)
 #app.include_router(auth.router) # skip auth for now
 app.include_router(pipeline.router)
+app.include_router(upload.router)
 
 # ---------- Root Endpoint ----------
 @app.get("/")

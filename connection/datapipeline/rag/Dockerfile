@@ -15,9 +15,6 @@ RUN pip install --no-cache-dir uv
 # Copy pyproject.toml
 COPY pyproject.toml .
 
-# Copy Python source files
-COPY *.py .
-
 # Install dependencies from pyproject.toml using uv
 # Note: We install dependencies directly, matching pyproject.toml
 RUN uv pip install --system \

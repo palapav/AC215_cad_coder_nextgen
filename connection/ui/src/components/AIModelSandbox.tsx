@@ -117,6 +117,14 @@ export function AIModelSandbox() {
   selectedModel === "qwen-2.5-xb" ? "qwen" :
   selectedModel;
 
+  const blobFromImageSource = async (imageSource: string) => {
+    const response = await fetch(imageSource);
+    if (!response.ok) {
+      throw new Error("Unable to read selected image.");
+    }
+    return response.blob();
+  };
+
   const handleSendMessage = async (content: string, image?: string) => {
     if (!currentSessionId) return;
   
@@ -140,18 +148,91 @@ export function AIModelSandbox() {
     setIsGenerating(true);
   
     try {
+      const userId = currentSessionId || "default";
       // ✅ Call your FastAPI /generate_cad endpoint
-      const response = await fetch("http://localhost:8000/generate_cad", {
+      // Use Modal backend URL if provided, otherwise fall back to localhost or proxy
+      const modalBackendUrl = import.meta.env.VITE_MODAL_BACKEND_URL || "";
+      const useProxy = import.meta.env.DEV && import.meta.env.VITE_USE_PROXY !== 'false' && !modalBackendUrl;
+      
+      const baseUrl = modalBackendUrl || (useProxy ? "" : "http://localhost:8000");
+      const backendUrl = `${baseUrl}/generate_cad`;
+      const uploadUrl = `${baseUrl}/upload/`;
+
+      let uploadArtifacts: any = null;
+      if (image) {
+        console.log("Uploading image via:", uploadUrl);
+        const blob = await blobFromImageSource(image);
+        const extension = blob.type.split("/")[1] || "png";
+        const formData = new FormData();
+        formData.append("file", blob, `upload-${Date.now()}.${extension}`);
+        formData.append("user_id", userId);
+        formData.append("prompt", content);
+
+        const uploadResponse = await fetch(uploadUrl, {
+          method: "POST",
+          body: formData
+        });
+
+        if (!uploadResponse.ok) {
+          let errorMessage = `Upload failed with status ${uploadResponse.status}`;
+          try {
+            const uploadError = await uploadResponse.json();
+            errorMessage = uploadError.detail || JSON.stringify(uploadError);
+          } catch (uploadParseError) {
+            console.error("Unable to parse upload error:", uploadParseError);
+          }
+          throw new Error(errorMessage);
+        }
+
+        uploadArtifacts = await uploadResponse.json();
+        console.log("Upload response:", uploadArtifacts);
+      }
+
+      const cachedImagePath =
+        uploadArtifacts?.preprocess?.artifacts?.image_path ??
+        (image && !image.startsWith("data:") ? image : null);
+      console.log("Making request to:", backendUrl, "(proxy:", useProxy, ")");
+      console.log("Request payload:", {
+        prompt: content,
+        image_path: cachedImagePath || image || null,
+        user_id: userId,
+        model_choice: normalizedModel,
+        rag_context: null
+      });
+
+      const response = await fetch(backendUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: content,
-          image_path: image || null,
-          user_id: "default",
+          image_path: cachedImagePath || image || null,
+          user_id: userId,
           model_choice: normalizedModel,  // must be "llava" or "qwen"
           rag_context: null
         }),
       });
+  
+      console.log("Response status:", response.status, response.statusText);
+      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+  
+      // Check if response is OK before parsing
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorDetail = errorData.detail || errorData.message || errorDetail;
+          console.error("Backend error response:", errorData);
+        } catch (e) {
+          // If we can't parse error JSON, use status text
+          try {
+            const errorText = await response.text();
+            if (errorText) errorDetail = errorText.substring(0, 200);
+          } catch (textError) {
+            console.error("Could not read error response:", textError);
+          }
+        }
+        throw new Error(errorDetail);
+      }
   
       // Parse the backend response
       const data = await response.json();
@@ -183,18 +264,34 @@ export function AIModelSandbox() {
       );
     } catch (error) {
       console.error("Error contacting backend:", error);
-      const errorMessage: Message = {
+      console.error("Error type:", error instanceof TypeError ? "Network/CORS error" : "HTTP/Application error");
+      console.error("Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
+      let errorMessage: string;
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        // Network error (CORS, connection refused, etc.)
+        errorMessage = `Network error: Unable to connect to backend at http://localhost:8000. This could be due to:\n- Backend not running\n- CORS configuration issue\n- Firewall blocking the connection\n\nPlease check the browser console for more details.`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      } else {
+        errorMessage = String(error);
+      }
+
+      const userFriendlyError: Message = {
         id: (Date.now() + 2).toString(),
         role: "assistant",
-        content:
-          "❌ Failed to reach backend or received an invalid response. Please try again.",
+        content: `❌ ${errorMessage}`,
         timestamp: new Date(),
         model: getModelName(selectedModel),
       };
       setSessions(prev =>
         prev.map(session =>
           session.id === currentSessionId
-            ? { ...session, messages: [...session.messages, errorMessage] }
+            ? { ...session, messages: [...session.messages, userFriendlyError] }
             : session
         )
       );

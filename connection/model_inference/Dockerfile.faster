@@ -1,0 +1,48 @@
+# Optimized Dockerfile - Faster Build with Better Caching
+# Use conda base image to avoid installation issues
+FROM continuumio/miniconda3:latest
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Update conda and install system dependencies if needed
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        wget \
+        bzip2 \
+        ca-certificates \
+        curl \
+        build-essential; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*; \
+    conda update -y conda; \
+    conda clean -afy
+
+# Accept Terms of Service for Anaconda channels
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+# Create the llava conda environment
+RUN conda create -n llava python=3.10 -y
+
+# Upgrade pip and install build tools
+RUN conda run -n llava pip install --upgrade pip setuptools wheel
+
+# Copy dependency files first for better caching
+COPY pyproject.toml ./
+
+# Install all packages in a single RUN command to reduce layers
+# This is faster than multiple separate RUN commands
+RUN conda run -n llava pip install \
+    torch==2.1.2 \
+    torchvision==0.16.2 \
+    && conda run -n llava pip install -e ".[train]" \
+    && conda run -n llava pip install datasets tensorboard
+
+# Copy application code last (changes most frequently)
+COPY . .
+
+# Execute your custom script
+CMD ["conda", "run", "-n", "llava", "/bin/bash", "./scripts/v1_5/eval/test_gencadcode.sh", "CADCODER/CAD-Coder", "cadquery_test_data_subset100", "python", "scripts/generate_model_cad.py", "--dataset_name", "cadquery_test_data_subset100", "--model_tested", "CADCODER/CAD-Coder", "--code_language", "cadquery", "--pc_reps", "3", "--parallel"]
+

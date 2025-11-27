@@ -1,0 +1,19 @@
+# DVC ignore file
+# Files/directories to exclude from DVC tracking
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Scripts (not data)
+scripts/
+
+# Documentation
+*.md
+README.md
+
+# Temporary files
+*.tmp
+*.log
+

@@ -80,15 +80,26 @@ def preprocess_image(img_path: str, transform, save_path: str):
 
 def resolve_path(path, input_dir):
     """
-    Resolves Docker paths (/app/data/...) or mismatched paths
-    by attempting to map them to your local dataset folder.
+    Resolves Docker paths (/app/data/..., /workspace/...) or host paths
+    by attempting to map them to accessible paths in the container.
     """
-    print(path)
+    print(f"Resolving path: {path}")
+    
+    # If path exists as-is, use it
     if os.path.exists(path):
-
+        print(f"Path exists: {path}")
         return path
 
-    # Convert docker absolute -> local relative
+    # Convert /workspace paths (mounted project root)
+    if path.startswith("/workspace"):
+        if os.path.exists(path):
+            return path
+        # Try relative to current working directory
+        rel_path = path.replace("/workspace/", "")
+        if os.path.exists(rel_path):
+            return rel_path
+
+    # Convert docker /app/data paths
     if path.startswith("/app/data"):
         alt = path.replace("/app/data", os.path.abspath(input_dir))
         if os.path.exists(alt):
@@ -100,12 +111,27 @@ def resolve_path(path, input_dir):
     if os.path.exists(alt):
         return alt
 
+    # Try in /workspace if it's a host absolute path
+    # Extract relative path from absolute host path
+    if os.path.isabs(path) and not path.startswith("/app") and not path.startswith("/workspace"):
+        # Try to find it in /workspace
+        # This handles paths like /Users/.../connection/model_inference/...
+        workspace_path = f"/workspace{path}" if not path.startswith("/workspace") else path
+        # Or try to extract the relative part after "connection"
+        if "connection" in path:
+            rel_part = path.split("connection", 1)[1].lstrip("/")
+            workspace_path = f"/workspace/{rel_part}"
+            if os.path.exists(workspace_path):
+                print(f"Found in workspace: {workspace_path}")
+                return workspace_path
+
     # Try one directory up if input_dir is nested
     alt = os.path.join(os.path.dirname(input_dir), "raw_test", basename)
     if os.path.exists(alt):
         return alt
 
     # If nothing works, return None
+    print(f"Could not resolve path: {path}")
     return None
 
 
@@ -114,61 +140,59 @@ def resolve_path(path, input_dir):
 # -----------------------------
 
 def preprocess_dataset(input_dir: str, output_dir: str, uid: str, prompt: str, img_size: int = 336):
-    """Reads image/code pairs, applies normalization and cleaning, and saves aligned JSONL dataset."""
+    """Reads image/code pairs, applies normalization and cleaning, and saves aligned JSONL dataset.
+    
+    Args:
+        input_dir: Path to the input image file (or directory containing images)
+        output_dir: Directory where processed images and JSONL will be saved
+        uid: User ID for the processed sample
+        prompt: User prompt/command
+        img_size: Target image size for preprocessing
+    """
     os.makedirs(output_dir, exist_ok=True)
     transform = build_image_transform(img_size)
-    # index_path = os.path.join(input_dir, "index.csv")
-    # if not os.path.exists(index_path):
-    #     raise FileNotFoundError(f"Missing index.csv in {input_dir}. Please run dataloader.py first.")
-
+    
     jsonl_path = os.path.join(output_dir, "dataset.jsonl")
     processed_samples = []
 
-    # with open(index_path, "r") as f:
-    lines = [input_dir]  # Skip header
-    print(f"⚙️  Starting preprocessing for {1} samples...")
-    for i in range(0,len(lines)):
-        parts = uid,input_dir,prompt
-        if len(parts) < 3:
-            continue
-        uid, img_path, code_path = parts
+    # Check if input_dir is a file or directory
+    if os.path.isfile(input_dir):
+        # Single image file
+        image_files = [input_dir]
+        base_dir = os.path.dirname(input_dir) or "."
+    elif os.path.isdir(input_dir):
+        # Directory containing images
+        image_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) 
+                      if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif'))]
+        base_dir = input_dir
+    else:
+        raise FileNotFoundError(f"Input path does not exist: {input_dir}")
+
+    print(f"⚙️  Starting preprocessing for {len(image_files)} image(s)...")
+    
+    for img_path in image_files:
         # Resolve possible Docker paths or mismatched local paths
-        img_path = resolve_path(img_path, input_dir)
-        code_path = 'result'
-        # Skip if files are missing after resolving
-        print(img_path)
-        print('done')
-        if img_path is None or code_path is None:
+        resolved_img_path = resolve_path(img_path, base_dir)
+        
+        if resolved_img_path is None or not os.path.exists(resolved_img_path):
+            print(f"⚠️ Skipping {img_path}: file not found")
             continue
+        
         # --- Image preprocessing ---
         out_img_path = os.path.join(output_dir, f"{uid}.png")
         try:
-            preprocess_image(img_path, transform, out_img_path)
+            preprocess_image(resolved_img_path, transform, out_img_path)
+            print(f"✅ Processed image: {resolved_img_path} -> {out_img_path}")
         except Exception as e:
             print(f"⚠️ Skipping {uid}: image error -> {e}")
             continue
 
-        # # --- Code cleanup ---
-        # try:
-        #     with open(code_path, "r", encoding="utf-8") as f_code:
-        #         raw_code = f_code.read()
-        #     cleaned_code = clean_cadquery_code(raw_code)
-        # except Exception as e:
-        #     print(f"⚠️ Skipping {uid}: code read error -> {e}")
-        #     continue
-
-        # --- Prompt ---
-        # prompt = (
-        #     "Generate the CadQuery code needed to create the CAD object in the provided image. "
-        #     "Return only executable CadQuery code, with no explanations."
-        # )
-
+        # --- Create sample entry ---
         processed_samples.append({
-            "question_id": uid,
+            "question_id": str(uid),
             "image": out_img_path,
             "text": prompt,
             "category": 'default',
-            #  "ground_truth": cleaned_code
         })
 
     # Save all processed samples to JSONL
@@ -188,7 +212,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Preprocess GenCAD-Code dataset for CAD-Coder pipeline")
     parser.add_argument("--input_dir", type=str, required=True, help="Input directory from user as image or text")
     parser.add_argument("--output_dir", type=str, required=True, help="Output directory for processed data")
-    parser.add_argument("--uid", type=int, default=0, help="user_id")
+    parser.add_argument("--uid", type=str, default="0", help="user_id")
     parser.add_argument("--prompt", type=str, required=True, help="Command from User")
     parser.add_argument("--img_size", type=int, default=336, help="Resize dimension for CLIP preprocessing (default=336)")
     args = parser.parse_args()

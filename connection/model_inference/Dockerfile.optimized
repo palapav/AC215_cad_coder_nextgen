@@ -1,0 +1,52 @@
+# Use conda base image to avoid installation issues
+FROM continuumio/miniconda3:latest
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Update conda and install system dependencies if needed
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        wget \
+        bzip2 \
+        ca-certificates \
+        curl \
+        build-essential; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*; \
+    conda update -y conda; \
+    conda clean -afy
+
+# Accept Terms of Service for Anaconda channels (before copying files)
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+# Create the llava conda environment
+RUN conda create -n llava python=3.10 -y
+
+# Copy only dependency files first (for better Docker layer caching)
+COPY pyproject.toml ./
+
+# Upgrade pip first (single layer)
+RUN conda run -n llava pip install --upgrade pip setuptools wheel
+
+# Install PyTorch first (large package, benefits from separate layer caching)
+# Note: torch is already in pyproject.toml, but installing separately allows better caching
+RUN conda run -n llava pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
+
+# Install the main package and all dependencies in one go
+# This combines: pip install -e . and pip install -e ".[train]"
+RUN conda run -n llava pip install -e ".[train]"
+
+# Install additional packages that might not be in pyproject.toml
+# Note: datasets, peft, tensorboard, transformers are likely already installed by -e ".[train]"
+# Only install if they're actually missing
+RUN conda run -n llava pip install datasets tensorboard || true
+
+# Copy the rest of the application code (after dependencies are installed)
+COPY . .
+
+# Execute your custom script
+CMD ["conda", "run", "-n", "llava", "/bin/bash", "./scripts/v1_5/eval/test_gencadcode.sh", "CADCODER/CAD-Coder", "cadquery_test_data_subset100", "python", "scripts/generate_model_cad.py", "--dataset_name", "cadquery_test_data_subset100", "--model_tested", "CADCODER/CAD-Coder", "--code_language", "cadquery", "--pc_reps", "3", "--parallel"]
+

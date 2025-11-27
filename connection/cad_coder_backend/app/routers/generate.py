@@ -6,15 +6,21 @@ from app.services.db_service import add_record
 # from app.services.gcs_service import upload_cad_code
 
 router = APIRouter(prefix="", tags=["Generation"])
-async def fetch_preprocessed_data(user_id: str, prompt: str):
-    # Example: Fetch data from a database or a storage service
-    # Replace this section with your actual data retrieval logic
+preprocessed_storage = {}
 
-    # Mocked response, replace with actual logic
-    preprocessed_data = {
-        "image_path": "/home/chensiyuan06/CAD-Coder/src2/connection/data",  # Replace with your data
-        "rag_context": "Some context based on prompt"     # Replace with actual context if needed
-    }
+async def fetch_preprocessed_data(user_id: str, prompt: str, fallback_image_path: str | None = None):
+    key = f"{user_id}:{prompt}"
+    if key in preprocessed_storage:
+        return preprocessed_storage[key]
+    
+    if fallback_image_path:
+        return {
+            "image_path": fallback_image_path,
+            "dataset_path": None,
+            "raw_upload_path": None,
+        }
+    
+    raise HTTPException(status_code=404, detail="Preprocessed data not found.")
 
     # Example: You may want to query your database for the data.
     # Here you should implement the actual logic to fetch based on user_id and prompt.
@@ -25,14 +31,14 @@ async def fetch_preprocessed_data(user_id: str, prompt: str):
     #     "rag_context": record.rag_context
     # }
 
-    return preprocessed_data  # Return the fetched data
 @router.post("/generate_cad", response_model=CADOutput)
 async def generate_cad(input_data: CADInput):
     try:
         print('Request received for CAD generation.')
         preprocessed_data = await fetch_preprocessed_data(
             user_id=input_data.user_id,
-            prompt=input_data.prompt
+            prompt=input_data.prompt,
+            fallback_image_path=input_data.image_path
         )
         cad_code = await generate_cad_code(
             prompt=input_data.prompt,

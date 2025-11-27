@@ -11,5 +11,6 @@ dependencies = [
     "transformers",
     "torchvision",
     "datasets>=2.19.0",
-     "pydantic>=2.7.0"
+     "pydantic>=2.7.0",
+     "tqdm"
 ]
