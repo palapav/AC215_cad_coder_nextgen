@@ -53,8 +53,7 @@ if _modal_enabled:
         _modal_init_error = exc
         _modal_enabled = False
         logger.warning("[Model Service] Modal client disabled: %s", exc)
-else:
-    if QWEN_DIR.exists() and str(QWEN_DIR) not in sys.path:
+elif QWEN_DIR.exists() and str(QWEN_DIR) not in sys.path:
     sys.path.insert(0, str(QWEN_DIR))
 
 
@@ -99,18 +98,18 @@ def _try_run_llava_script(uid: str | None) -> str | None:
         return None
 
     try:
-            command = [str(script_path), "CADCODER/CAD-Coder", "dataset"]
-            result = subprocess.run(
-                command, 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE, 
-                text=True, 
+        command = [str(script_path), "CADCODER/CAD-Coder", "dataset"]
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
             cwd=str(llava_path),
             timeout=300,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"Inference error: {result.stderr.strip()}")
-            
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Inference error: {result.stderr.strip()}")
+
         output_file = (
             llava_path
             / "inference"
@@ -129,22 +128,22 @@ def _try_run_llava_script(uid: str | None) -> str | None:
                 / "dataset"
                 / "merge.jsonl"
             )
-            if not output_file.exists():
+        if not output_file.exists():
             return None
-            
+
         with open(output_file, "r") as file:
-                    for line in file:
-                        try:
-                            record = json.loads(line.strip())
+            for line in file:
+                try:
+                    record = json.loads(line.strip())
                     if "text" in record and record.get("question_id") == uid:
                         return record["text"]
-                        except json.JSONDecodeError:
-                            continue
-                
+                except json.JSONDecodeError:
+                    continue
+
         with open(output_file, "r") as file:
-                    first_line = file.readline()
-                    if first_line:
-                        record = json.loads(first_line.strip())
+            first_line = file.readline()
+            if first_line:
+                record = json.loads(first_line.strip())
                 if "text" in record:
                     return record["text"]
     except subprocess.TimeoutExpired:

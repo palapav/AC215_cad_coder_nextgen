@@ -1,17 +1,18 @@
-"""
-Production RAG client that reuses the src/datapipeline/rag retrieval stack.
-"""
+"""Production RAG helper that reuses the src/datapipeline/rag retrieval stack."""
 from __future__ import annotations
 
 import base64
 import logging
 import os
+import random
 import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Optional, Tuple, Union
 
 from dotenv import load_dotenv
+
+from app.services.db_service import get_all_prompts
 
 load_dotenv()
 
@@ -180,3 +181,17 @@ def retrieve_context(
     finally:
         if cleanup:
             cleanup()
+
+
+def retrieve_similar_context(prompt: str, *, top_k: int = 3) -> list[dict]:
+    """Legacy API used by /history/context for quick suggestions."""
+    rag_payload = retrieve_context(prompt=prompt, top_k=top_k)
+    if rag_payload.get("used"):
+        return rag_payload.get("results", [])
+
+    # Fallback: sample prompts from DB so UI still shows something
+    all_prompts = get_all_prompts()
+    if not all_prompts:
+        return [{"text": "No context available"}]
+    sample = random.sample(all_prompts, min(top_k, len(all_prompts)))
+    return [{"text": item.get("prompt") or item} for item in sample]

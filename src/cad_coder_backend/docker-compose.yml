@@ -17,6 +17,9 @@ services:
       RAG_DIR: ${RAG_DIR:-/app/rag}
       RAG_PROJECT_ID: ${RAG_PROJECT_ID:-cad-coder-nextgen}
       RAG_LOCATION: ${RAG_LOCATION:-us-central1}
+      RAG_INDEX_NAME: ${RAG_INDEX_NAME:-cadcoder-mm-index}
+      RAG_ENDPOINT_NAME: ${RAG_ENDPOINT_NAME:-cadcoder-mm-endpoint}
+      RAG_DEPLOYED_INDEX_ID: ${RAG_DEPLOYED_INDEX_ID:-test_backend_rag_model_inf_1764239034605}
       ENABLE_RAG: ${ENABLE_RAG:-true}
     ports:
       - "8000:8000"

@@ -49,6 +49,9 @@ The backend can prepend retrieval-augmented context from the vector search index
    ENABLE_RAG=true
    RAG_PROJECT_ID=<your-gcp-project>
    RAG_LOCATION=us-central1
+   RAG_INDEX_NAME=<vertex-index-display-name>
+   RAG_ENDPOINT_NAME=<vertex-endpoint-display-name>
+   RAG_DEPLOYED_INDEX_ID=<deployed-index-id>
    ```
    (`GOOGLE_APPLICATION_CREDENTIALS` and `RAG_DIR` default to `/app/rag` inside Docker; no change needed.)
 3. Confirm the Matching Engine index/endpoint referenced in `src/datapipeline/rag/config.py` are deployed.
