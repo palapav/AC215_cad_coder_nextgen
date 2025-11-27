@@ -10,6 +10,7 @@ google-auth-oauthlib==1.2.1
 httpx==0.28.1
 modal>=0.60.0
 pillow==10.3.0  # For image processing in modal_client
+google-cloud-aiplatform==1.64.0
 setuptools>=68.0.0
 wheel>=0.41.0
 # Note: Heavy ML dependencies (transformers, accelerate, torch, etc.) are NOT needed here

@@ -57,11 +57,13 @@ async def generate_cad(input_data: CADInput):
                 print(f'[Generate] Empty prompt provided, using default prompt')
         
         print(f'[Generate] Calling generate_cad_code with prompt: {prompt[:50]}...')
-        cad_code = await generate_cad_code(
+        model_response = await generate_cad_code(
             prompt=prompt,
             image=image_input,
             model_choice=model_choice_value,
+            image_reference=input_data.image_path,
         )
+        cad_code = model_response.get("cad_code")
         
         # Validate that we got CAD code
         if not cad_code or not cad_code.strip():
@@ -86,8 +88,8 @@ async def generate_cad(input_data: CADInput):
             prompt=input_data.prompt,
             cad_code=cad_code,
             model=input_data.model_choice,
-            #gcs_uri=gcs_uri,
-            #rag_used=bool(input_data.rag_context),
+            rag_used=model_response.get("rag_used", False),
+            rag_context=model_response.get("rag_context"),
             pipeline_stage="generate",
         )
     except Exception as e:

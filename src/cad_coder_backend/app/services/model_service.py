@@ -1,11 +1,19 @@
 import asyncio
-import os
 import json
+import logging
+import os
 import subprocess
 from enum import Enum
 from pathlib import Path
 import sys
-from dotenv import load_dotenv; load_dotenv()
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from app.services import rag_service
+
+logger = logging.getLogger(__name__)
 
 
 class ModelChoice(Enum):
@@ -13,8 +21,23 @@ class ModelChoice(Enum):
     QWEN = "qwen"
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-MODEL_INFERENCE_DIR = PROJECT_ROOT / "src" / "model_inference"
+CURRENT_FILE = Path(__file__).resolve()
+APP_DIR = CURRENT_FILE.parents[1]  # /app/app
+PROJECT_ROOT = APP_DIR.parent      # /app
+
+def _resolve_model_inference_dir() -> Path:
+    candidates = [
+        PROJECT_ROOT / "model_inference",
+        PROJECT_ROOT / "src" / "model_inference",
+        PROJECT_ROOT.parent / "model_inference",
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    return candidates[0]
+
+
+MODEL_INFERENCE_DIR = _resolve_model_inference_dir()
 LLAVA_DIR = MODEL_INFERENCE_DIR
 QWEN_DIR = MODEL_INFERENCE_DIR / "qwen"
 
@@ -24,16 +47,15 @@ _modal_init_error = None
 
 if _modal_enabled:
     try:
-        print("Loading modal client")
+        logger.info("Loading Modal client for Qwen inference")
         from app.services.modal_client import run_modal_qwen_inference, ModalConfigError
     except Exception as exc:  # pragma: no cover - network errors bubble up
         _modal_init_error = exc
         _modal_enabled = False
-        print(f"[Model Service] ⚠️ Modal client disabled: {exc}")
+        logger.warning("[Model Service] Modal client disabled: %s", exc)
 else:
-    # Ensure local Qwen code is importable when Modal is disabled
     if QWEN_DIR.exists() and str(QWEN_DIR) not in sys.path:
-        sys.path.insert(0, str(QWEN_DIR))
+    sys.path.insert(0, str(QWEN_DIR))
 
 
 async def _run_qwen_via_modal(prompt: str, image=None) -> str:
@@ -77,18 +99,18 @@ def _try_run_llava_script(uid: str | None) -> str | None:
         return None
 
     try:
-        command = [str(script_path), "CADCODER/CAD-Coder", "dataset"]
-        result = subprocess.run(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            command = [str(script_path), "CADCODER/CAD-Coder", "dataset"]
+            result = subprocess.run(
+                command, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE, 
+                text=True, 
             cwd=str(llava_path),
             timeout=300,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"Inference error: {result.stderr.strip()}")
-
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Inference error: {result.stderr.strip()}")
+            
         output_file = (
             llava_path
             / "inference"
@@ -107,22 +129,22 @@ def _try_run_llava_script(uid: str | None) -> str | None:
                 / "dataset"
                 / "merge.jsonl"
             )
-        if not output_file.exists():
+            if not output_file.exists():
             return None
-
+            
         with open(output_file, "r") as file:
-            for line in file:
-                try:
-                    record = json.loads(line.strip())
+                    for line in file:
+                        try:
+                            record = json.loads(line.strip())
                     if "text" in record and record.get("question_id") == uid:
                         return record["text"]
-                except json.JSONDecodeError:
-                    continue
-
+                        except json.JSONDecodeError:
+                            continue
+                
         with open(output_file, "r") as file:
-            first_line = file.readline()
-            if first_line:
-                record = json.loads(first_line.strip())
+                    first_line = file.readline()
+                    if first_line:
+                        record = json.loads(first_line.strip())
                 if "text" in record:
                     return record["text"]
     except subprocess.TimeoutExpired:
@@ -137,6 +159,7 @@ async def generate_cad_code(
     image=None,
     model_choice: str | ModelChoice = "llava",
     uid: str | None = None,
+    image_reference: str | None = None,
 ):
     """Main entrypoint used by the FastAPI router."""
     await asyncio.sleep(0)
@@ -149,17 +172,52 @@ async def generate_cad_code(
         model_choice_value = ModelChoice.LLAVA.value
 
     if model_choice_value == ModelChoice.QWEN.value:
-        return await _run_qwen_via_modal(prompt=prompt, image=image)
+        rag_payload = {"context": "", "results": [], "used": False}
+        try:
+            rag_payload = rag_service.retrieve_context(
+                prompt=prompt,
+                image=image,
+                image_reference=image_reference,
+            )
+        except Exception as exc:  # pragma: no cover - guard rail
+            logger.warning("[Model Service] RAG retrieval failed: %s", exc)
+
+        rag_context = rag_payload.get("context") or ""
+        prompt_for_model = prompt
+        if rag_context:
+            prompt_for_model = (
+                f"{rag_context}\n\n"
+                "Using the above CAD code examples as inspiration, respond to the user's request:\n"
+                f"{prompt}"
+            )
+
+        cad_text = await _run_qwen_via_modal(prompt=prompt_for_model, image=image)
+        return {
+            "cad_code": cad_text,
+            "rag_used": rag_payload.get("used", False),
+            "rag_context": rag_context or None,
+            "rag_results": rag_payload.get("results", []),
+        }
 
     # LLaVA path (legacy baseline)
     llava_result = _try_run_llava_script(uid)
     if llava_result:
-        return llava_result
-    return _llava_placeholder()
+        return {
+            "cad_code": llava_result,
+            "rag_used": False,
+            "rag_context": None,
+            "rag_results": [],
+        }
+    return {
+        "cad_code": _llava_placeholder(),
+        "rag_used": False,
+        "rag_context": None,
+        "rag_results": [],
+    }
 
 
 if __name__ == "__main__":
     import asyncio
 
     result = asyncio.run(generate_cad_code("make a cube", model_choice="llava"))
-    print(result)
+    print(result["cad_code"])

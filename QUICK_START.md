@@ -40,6 +40,25 @@ Backend runs at: http://localhost:8000
    ```
    You should see a JSON response with real CAD code generated via Modal. The frontend/API now uses Modal GPUs automatically when `model_choice="qwen"`.
 
+### (Optional) Enable Google Cloud RAG
+The backend can prepend retrieval-augmented context from the vector search index before calling Qwen.
+
+1. Ensure `src/datapipeline/rag/key.json` contains a service-account key with Vertex AI + Matching Engine access.
+2. In `src/.env`, set:
+   ```
+   ENABLE_RAG=true
+   RAG_PROJECT_ID=<your-gcp-project>
+   RAG_LOCATION=us-central1
+   ```
+   (`GOOGLE_APPLICATION_CREDENTIALS` and `RAG_DIR` default to `/app/rag` inside Docker; no change needed.)
+3. Confirm the Matching Engine index/endpoint referenced in `src/datapipeline/rag/config.py` are deployed.
+4. Rebuild the backend so dependencies are installed:
+   ```bash
+   docker compose down
+   docker compose up -d --build backend mongo
+   ```
+5. Run `bash test.sh` again—you should see `rag_used=true` in the response, and the prompt sent to Qwen will include retrieved CAD code examples.
+
 ## Start Frontend
 
 ### Option 1: Dev Mode (Recommended - Hot Reload)
