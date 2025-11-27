@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  dvc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount data directory so changes persist
+      - ./data:/app/data
+      # Mount scripts (if you want to edit them)
+      - ./scripts:/app/scripts
+    working_dir: /app
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+

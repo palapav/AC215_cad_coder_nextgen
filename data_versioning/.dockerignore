@@ -1,0 +1,7 @@
+# Ignore these in Docker build context
+.dvc/
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+
