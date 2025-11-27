@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy validation script
+COPY validate_auth.py .
+
+# Make it executable
+RUN chmod +x validate_auth.py
+
+# Run validation
+CMD ["python", "validate_auth.py"]
+
