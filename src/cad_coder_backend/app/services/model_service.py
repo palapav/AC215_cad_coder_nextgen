@@ -193,9 +193,13 @@ async def generate_cad_code(
 
         try:
             cad_text = await _run_qwen_via_modal(prompt=prompt_for_model, image=image)
-        except Exception as exc:
+        except RuntimeError as exc:
+            # RuntimeError indicates backend misconfiguration - propagate it
             logger.error("[Model Service] Qwen inference failed: %s", exc)
-            # Return placeholder on failure
+            raise
+        except Exception as exc:
+            # Other exceptions (network, etc.) - return placeholder
+            logger.error("[Model Service] Qwen inference failed: %s", exc)
             cad_text = _qwen_placeholder()
 
         return {
@@ -221,9 +225,13 @@ async def generate_cad_code(
 
         try:
             cad_text = await _run_llava_via_modal(prompt=prompt, image=actual_image)
-        except Exception as exc:
+        except RuntimeError as exc:
+            # RuntimeError indicates backend misconfiguration - propagate it
             logger.error("[Model Service] LLaVA inference failed: %s", exc)
-            # Return placeholder on failure
+            raise
+        except Exception as exc:
+            # Other exceptions (network, etc.) - return placeholder
+            logger.error("[Model Service] LLaVA inference failed: %s", exc)
             cad_text = _llava_placeholder()
 
         return {

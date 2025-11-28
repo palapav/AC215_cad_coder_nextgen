@@ -699,6 +699,197 @@ class TestRAGService:
         with pytest.raises(RuntimeError):
             rag_service._ensure_google_credentials()
 
+    def test_find_rag_dir_from_env(self, tmp_path, monkeypatch):
+        """Test _find_rag_dir uses RAG_DIR environment variable."""
+        from app.services import rag_service
+        
+        test_dir = tmp_path / "custom_rag"
+        test_dir.mkdir()
+        monkeypatch.setenv("RAG_DIR", str(test_dir))
+        
+        # Reload module to pick up env var
+        import importlib
+        importlib.reload(rag_service)
+        
+        result = rag_service._find_rag_dir()
+        assert result == test_dir
+
+    def test_get_retriever_rag_enabled_with_import_error(self, monkeypatch):
+        """Test _get_retriever when RAG enabled but import fails."""
+        from app.services import rag_service
+        
+        monkeypatch.setenv("ENABLE_RAG", "true")
+        monkeypatch.setattr(rag_service, "MultimodalRAGRetriever", None)
+        monkeypatch.setattr(rag_service, "_IMPORT_ERROR", Exception("Import failed"))
+        
+        import importlib
+        importlib.reload(rag_service)
+        
+        result = rag_service._get_retriever()
+        assert result is None
+
+    def test_get_retriever_rag_dir_not_found(self, monkeypatch):
+        """Test _get_retriever when RAG_DIR is None."""
+        from app.services import rag_service
+        
+        monkeypatch.setenv("ENABLE_RAG", "true")
+        monkeypatch.setattr(rag_service, "RAG_DIR", None)
+        
+        result = rag_service._get_retriever()
+        assert result is None
+
+    def test_prepare_image_source_with_pil_image(self):
+        """Test _prepare_image_source with PIL Image."""
+        from PIL import Image
+        from app.services.rag_service import _prepare_image_source
+        
+        img = Image.new('RGB', (100, 100), color='red')
+        path, cleanup = _prepare_image_source(img, None)
+        
+        assert path is not None
+        assert cleanup is not None
+        assert os.path.exists(path)
+        
+        # Cleanup
+        cleanup()
+        assert not os.path.exists(path)
+
+    def test_prepare_image_source_with_base64_reference(self):
+        """Test _prepare_image_source with base64 data URL."""
+        from PIL import Image
+        from app.services.rag_service import _prepare_image_source
+        
+        img = Image.new('RGB', (50, 50), color='blue')
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        b64_data = base64.b64encode(buffer.getvalue()).decode()
+        data_url = f"data:image/png;base64,{b64_data}"
+        
+        path, cleanup = _prepare_image_source(None, data_url)
+        
+        assert path is not None
+        assert cleanup is not None
+        assert os.path.exists(path)
+        
+        # Cleanup
+        cleanup()
+        assert not os.path.exists(path)
+
+    def test_prepare_image_source_with_file_path(self, tmp_path):
+        """Test _prepare_image_source with existing file path."""
+        from PIL import Image
+        from app.services.rag_service import _prepare_image_source
+        
+        img_path = tmp_path / "test.png"
+        img = Image.new('RGB', (50, 50), color='green')
+        img.save(img_path)
+        
+        path, cleanup = _prepare_image_source(None, str(img_path))
+        
+        assert path == str(img_path)
+        assert cleanup is None
+
+    def test_prepare_image_source_with_remote_path(self):
+        """Test _prepare_image_source with remote/GCS path."""
+        from app.services.rag_service import _prepare_image_source
+        
+        path, cleanup = _prepare_image_source(None, "gs://bucket/path/to/image.png")
+        
+        assert path == "gs://bucket/path/to/image.png"
+        assert cleanup is None
+
+    def test_retrieve_similar_context_with_rag_enabled(self, monkeypatch):
+        """Test retrieve_similar_context when RAG is enabled."""
+        from app.services import rag_service
+        
+        mock_retriever = Mock()
+        mock_result = Mock()
+        mock_result.to_dict.return_value = {"text": "Example CAD code"}
+        mock_retriever.query_text.return_value = [mock_result]
+        mock_retriever.get_rag_context.return_value = "Example context"
+        
+        monkeypatch.setenv("ENABLE_RAG", "true")
+        monkeypatch.setattr(rag_service, "_get_retriever", lambda: mock_retriever)
+        
+        result = rag_service.retrieve_similar_context("test prompt", top_k=3)
+        
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["text"] == "Example CAD code"
+
+    def test_retrieve_similar_context_fallback_to_db(self, monkeypatch):
+        """Test retrieve_similar_context falls back to DB when RAG disabled."""
+        from app.services import rag_service
+        
+        monkeypatch.setenv("ENABLE_RAG", "false")
+        
+        with patch('app.services.rag_service.get_all_prompts') as mock_db:
+            mock_db.return_value = [
+                {"prompt": "make a cube"},
+                {"prompt": "create a sphere"},
+                {"prompt": "build a cylinder"}
+            ]
+            
+            result = rag_service.retrieve_similar_context("test", top_k=2)
+            
+            assert isinstance(result, list)
+            assert len(result) == 2
+            assert all("text" in item for item in result)
+
+    def test_retrieve_similar_context_empty_db(self, monkeypatch):
+        """Test retrieve_similar_context with empty database."""
+        from app.services import rag_service
+        
+        monkeypatch.setenv("ENABLE_RAG", "false")
+        
+        with patch('app.services.rag_service.get_all_prompts') as mock_db:
+            mock_db.return_value = []
+            
+            result = rag_service.retrieve_similar_context("test")
+            
+            assert isinstance(result, list)
+            assert len(result) == 1
+            assert result[0]["text"] == "No context available"
+
+    def test_retrieve_context_exception_handling(self, monkeypatch):
+        """Test retrieve_context handles exceptions gracefully."""
+        from app.services import rag_service
+        
+        mock_retriever = Mock()
+        mock_retriever.query_text.side_effect = Exception("RAG query failed")
+        mock_retriever.get_rag_context.return_value = None
+        
+        monkeypatch.setenv("ENABLE_RAG", "true")
+        monkeypatch.setattr(rag_service, "_get_retriever", lambda: mock_retriever)
+        
+        result = rag_service.retrieve_context("test prompt")
+        
+        assert isinstance(result, dict)
+        assert result["used"] is False
+        assert result["context"] == ""
+        assert result["results"] == []
+
+    def test_retrieve_context_with_multimodal_query(self, monkeypatch):
+        """Test retrieve_context with image uses multimodal query."""
+        from PIL import Image
+        from app.services import rag_service
+        
+        mock_retriever = Mock()
+        mock_result = Mock()
+        mock_result.to_dict.return_value = {"text": "Example"}
+        mock_retriever.query_multimodal.return_value = [mock_result]
+        mock_retriever.get_rag_context.return_value = "Context"
+        
+        monkeypatch.setenv("ENABLE_RAG", "true")
+        monkeypatch.setattr(rag_service, "_get_retriever", lambda: mock_retriever)
+        
+        img = Image.new('RGB', (100, 100), color='red')
+        result = rag_service.retrieve_context("test", image=img)
+        
+        assert result["used"] is True
+        assert result["context"] == "Context"
+        mock_retriever.query_multimodal.assert_called_once()
+
 
 # ============================================================================
 # DB Service Tests
@@ -926,6 +1117,37 @@ class TestUtils:
         
         # Should not raise
         init_environment()
+
+    def test_setup_logging_configures_logger(self):
+        """Test setup_logging configures logging correctly."""
+        import logging
+        from app.services.utils import setup_logging
+        
+        # Clear existing handlers
+        root_logger = logging.getLogger()
+        root_logger.handlers = []
+        
+        setup_logging()
+        
+        # Check that logging is configured
+        assert root_logger.level == logging.INFO
+        assert len(root_logger.handlers) > 0
+
+    def test_ensure_env_vars_empty_list(self):
+        """Test ensure_env_vars with empty list."""
+        from app.services.utils import ensure_env_vars
+        
+        # Should not raise
+        ensure_env_vars()
+
+    def test_ensure_env_vars_none_value(self, monkeypatch):
+        """Test ensure_env_vars when env var is set to empty string."""
+        from app.services.utils import ensure_env_vars
+        
+        monkeypatch.setenv("TEST_VAR", "")
+        
+        with pytest.raises(EnvironmentError):
+            ensure_env_vars("TEST_VAR")
 
 
 # ============================================================================

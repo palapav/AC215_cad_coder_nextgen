@@ -146,6 +146,7 @@ class TestGenerateRouter:
             
             assert response.status_code == 200
             # Should use default prompt for image
+            assert mock_gen.await_args is not None
             call_kwargs = mock_gen.await_args.kwargs
             assert "Generate the CADQuery code" in call_kwargs["prompt"]
 
@@ -166,6 +167,7 @@ class TestGenerateRouter:
             
             assert response.status_code == 200
             # Should use default prompt
+            assert mock_gen.await_args is not None
             call_kwargs = mock_gen.await_args.kwargs
             assert "simple geometric shape" in call_kwargs["prompt"]
 
@@ -235,6 +237,42 @@ class TestGenerateRouter:
             
             assert response.status_code == 500
             assert "CAD generation failed" in response.json()["detail"]
+
+    def test_generate_cad_llava_backend_disabled(self):
+        """Test generate endpoint when LLaVA backend is disabled."""
+        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+            # Simulate RuntimeError from disabled backend
+            mock_gen.side_effect = RuntimeError(
+                "Modal backend disabled but LLaVA model requested. "
+                "Set LLAVA_INFERENCE_BACKEND=modal and configure Modal tokens."
+            )
+            
+            response = client.post("/generate_cad", json={
+                "prompt": "make a cube",
+                "model_choice": "llava"
+            })
+            
+            assert response.status_code == 500
+            assert "CAD generation failed" in response.json()["detail"]
+            assert "LLaVA" in response.json()["detail"]
+
+    def test_generate_cad_qwen_backend_disabled(self):
+        """Test generate endpoint when Qwen backend is disabled."""
+        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+            # Simulate RuntimeError from disabled backend
+            mock_gen.side_effect = RuntimeError(
+                "Modal backend disabled but Qwen model requested. "
+                "Set QWEN_INFERENCE_BACKEND=modal and configure Modal tokens."
+            )
+            
+            response = client.post("/generate_cad", json={
+                "prompt": "make a sphere",
+                "model_choice": "qwen"
+            })
+            
+            assert response.status_code == 500
+            assert "CAD generation failed" in response.json()["detail"]
+            assert "Qwen" in response.json()["detail"]
 
 
 # ============================================================================

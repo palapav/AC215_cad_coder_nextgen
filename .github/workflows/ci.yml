@@ -152,8 +152,11 @@ jobs:
         run: |
           docker compose -f docker-compose.test.yml run --rm integration
         env:
+          QWEN_INFERENCE_BACKEND: mock
+          LLAVA_INFERENCE_BACKEND: mock
           QWEN_MODAL_MAX_NEW_TOKENS: 128
           LLAVA_MODAL_MAX_NEW_TOKENS: 128
+          ENABLE_RAG: "false"
       
       - name: Cleanup
         if: always()
