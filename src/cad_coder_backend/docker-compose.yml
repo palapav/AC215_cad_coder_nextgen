@@ -13,6 +13,7 @@ services:
     container_name: cadcoder-backend
     env_file: ../.env  # Use .env from parent src/ directory (single source of truth)
     environment:
+      # RAG Configuration
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/rag/key.json}
       RAG_DIR: ${RAG_DIR:-/app/rag}
       RAG_PROJECT_ID: ${RAG_PROJECT_ID:-cad-coder-nextgen}
@@ -21,6 +22,19 @@ services:
       RAG_ENDPOINT_NAME: ${RAG_ENDPOINT_NAME:-cadcoder-mm-endpoint}
       RAG_DEPLOYED_INDEX_ID: ${RAG_DEPLOYED_INDEX_ID:-test_backend_rag_model_inf_1764239034605}
       ENABLE_RAG: ${ENABLE_RAG:-true}
+      # Qwen Modal Configuration
+      QWEN_INFERENCE_BACKEND: ${QWEN_INFERENCE_BACKEND:-modal}
+      QWEN_MODAL_APP: ${QWEN_MODAL_APP:-cad-coder-qwen3}
+      QWEN_MODAL_FUNCTION: ${QWEN_MODAL_FUNCTION:-qwen_modal_infer}
+      QWEN_MODAL_MAX_NEW_TOKENS: ${QWEN_MODAL_MAX_NEW_TOKENS:-4096}
+      QWEN_MODAL_TEMPERATURE: ${QWEN_MODAL_TEMPERATURE:-0.0}
+      # LLaVA Modal Configuration
+      LLAVA_INFERENCE_BACKEND: ${LLAVA_INFERENCE_BACKEND:-modal}
+      LLAVA_MODAL_APP: ${LLAVA_MODAL_APP:-cad-coder-llava}
+      LLAVA_MODAL_FUNCTION: ${LLAVA_MODAL_FUNCTION:-llava_modal_infer}
+      LLAVA_MODAL_MAX_NEW_TOKENS: ${LLAVA_MODAL_MAX_NEW_TOKENS:-3450}
+      LLAVA_MODAL_TEMPERATURE: ${LLAVA_MODAL_TEMPERATURE:-0.0}
+      LLAVA_MODAL_TOP_P: ${LLAVA_MODAL_TOP_P:-1.0}
     ports:
       - "8000:8000"
     volumes:
