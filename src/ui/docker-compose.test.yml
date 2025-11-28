@@ -3,17 +3,53 @@
 #   docker compose -f docker-compose.test.yml run --rm test        # Run tests
 #   docker compose -f docker-compose.test.yml run --rm coverage    # Run with coverage
 #   docker compose -f docker-compose.test.yml run --rm lint        # Run linting
+#   docker compose -f docker-compose.test.yml run --rm build       # Run build
 
 services:
-  # Unit tests with coverage
+  # Unit tests without coverage (faster)
   test:
     build:
       context: .
       dockerfile: Dockerfile.test
     container_name: cadcoder-ui-test
+    command: npm test
+
+  # Unit tests with coverage (identical behavior to local `npm run test:coverage`)
+  coverage:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: cadcoder-ui-coverage
+    working_dir: /app              # must match WORKDIR in Dockerfile.test
     volumes:
-      - ./coverage:/app/coverage
-    command: npm run test:coverage
+      # Host ./coverage will receive copied coverage artifacts
+      - ./coverage:/app/coverage-output
+    # IMPORTANT: no CI=true here so behavior matches your local environment
+    command: >
+      sh -lc '
+        echo "Running coverage tests (npm run test:coverage)...";
+        # Let tests fail but still run the copy step
+        set +e
+        npm run test:coverage
+        TEST_EXIT=$?
+        set -e
+
+        echo
+        echo "Copying coverage reports to mounted output directory...";
+        if [ -d coverage ]; then
+          mkdir -p /app/coverage-output
+          cp -r coverage/* /app/coverage-output/ 2>/dev/null || echo "  (nothing to copy from ./coverage)"
+        else
+          echo "  No ./coverage directory found at /app/coverage"
+        fi
+
+        echo
+        echo "Files in /app/coverage-output (mapped to ./coverage on host):"
+        ls -la /app/coverage-output || echo "  (empty)"
+
+        # Propagate Vitest exit code so CI fails if tests fail
+        exit $TEST_EXIT
+      '
 
   # Lint/type check
   lint:
@@ -30,4 +66,3 @@ services:
       dockerfile: Dockerfile.test
     container_name: cadcoder-ui-build
     command: npm run build
-
