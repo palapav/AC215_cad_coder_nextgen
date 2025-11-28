@@ -126,18 +126,15 @@ def _serialize_image(image: ImageInput) -> tuple[Optional[bytes], Optional[str]]
     return buffer.getvalue(), "PNG"
 
 
-def _preprocess_image_for_llava(
-    image: ImageInput,
-    target_size: int = 336,
-) -> tuple[Optional[bytes], Optional[str]]:
-    """Preprocess image with CLIP-like normalization for LLaVA.
+def _load_pil_image(image: ImageInput) -> Image.Image:
+    """Deserialize supported image formats into a RGB PIL image.
     
-    Applies padding to square and resizing before serialization.
+    When no image is provided, a blank placeholder is returned so that
+    inference can still proceed.
     """
     if image is None:
-        return None, None
-    
-    # First deserialize the image
+        return Image.new("RGB", (336, 336), color=(0, 0, 0))
+
     pil_image: Optional[Image.Image] = None
     
     if isinstance(image, Image.Image):
@@ -162,7 +159,19 @@ def _preprocess_image_for_llava(
     if not isinstance(pil_image, Image.Image):
         raise ValueError("Failed to load image for LLaVA inference")
     
-    pil_image = pil_image.convert("RGB")
+    return pil_image.convert("RGB")
+
+
+def _preprocess_image_for_llava(
+    image: ImageInput,
+    target_size: int = 336,
+) -> tuple[Optional[bytes], Optional[str]]:
+    """Preprocess image with CLIP-like normalization for LLaVA.
+    
+    Applies padding to square and resizing before serialization. If the caller
+    does not supply an image, a blank placeholder image is generated.
+    """
+    pil_image = _load_pil_image(image)
     
     # Pad to square (CLIP-like preprocessing)
     width, height = pil_image.size
@@ -243,9 +252,6 @@ async def run_modal_llava_inference(
     Raises:
         ValueError: If no image is provided (LLaVA requires an image).
     """
-    if image is None:
-        raise ValueError("LLaVA CAD-Coder requires an image input for inference.")
-    
     fn_handle = _lookup_llava_modal_function()
     
     # Apply CLIP-like preprocessing for LLaVA

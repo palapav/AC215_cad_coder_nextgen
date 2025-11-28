@@ -1,0 +1,26 @@
+# Data Versioning Test Container
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements-test.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements-test.txt
+
+# Copy scripts and tests
+COPY scripts/ ./scripts/
+COPY tests/ ./tests/
+
+# Set Python path
+ENV PYTHONPATH=/app:/app/scripts
+
+# Default command runs tests with coverage
+CMD ["pytest", "tests/", "-v", "--cov=scripts", "--cov-report=term-missing", "--cov-report=xml:/app/coverage/data_versioning.xml"]
+

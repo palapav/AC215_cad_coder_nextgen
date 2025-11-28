@@ -1,0 +1,19 @@
+[run]
+source = data_ingestion,data_preprocessing,rag
+omit =
+    tests/*
+    */__pycache__/*
+    */demo.py
+    */clean_and_reindex.py
+    */delete_vectors.py
+    */test_rag.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == "__main__":
+    raise NotImplementedError
+
+fail_under = 40
+show_missing = true
+

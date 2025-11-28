@@ -217,15 +217,19 @@ def llava_modal_infer(
     # Get cached model (initialized once per container)
     tokenizer, model, image_processor, context_len = _initialize_llava_model()
     
-    # Process image if provided
+    # Process image if provided, otherwise fall back to a blank placeholder so
+    # text-only prompts can still go through the LLaVA inference path (parity
+    # with Qwen text-only support).
     if image_bytes:
         buffer = io.BytesIO(image_bytes)
         pil_image = Image.open(buffer).convert("RGB")
-        image_tensor = process_images([pil_image], image_processor, model.config)[0]
-        image_tensor = image_tensor.to(dtype=torch.float16, device="cuda")
     else:
-        # No image provided - return error
-        return "Error: CAD-Coder LLaVA requires an image input."
+        from PIL import Image as PilImage
+
+        pil_image = PilImage.new("RGB", (336, 336), color=(0, 0, 0))
+
+    image_tensor = process_images([pil_image], image_processor, model.config)[0]
+    image_tensor = image_tensor.to(dtype=torch.float16, device="cuda")
     
     # Build conversation prompt
     conv = conv_templates[CONV_MODE].copy()

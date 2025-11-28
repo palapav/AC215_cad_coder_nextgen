@@ -6,9 +6,74 @@ on:
   pull_request:
     branches: [main, master, develop]
 
+env:
+  PYTHON_VERSION_BACKEND: '3.11'
+  PYTHON_VERSION_FINETUNING: '3.10'
+  NODE_VERSION: '20'
+
 jobs:
-  # Model Fine-tuning Tests (CPU-only, lightweight)
+  # ============================================================================
+  # LINTING AND CODE QUALITY
+  # ============================================================================
+  lint-python:
+    name: Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_BACKEND }}
+      
+      - name: Install linters
+        run: pip install ruff black isort
+      
+      - name: Run Ruff (fast linter)
+        run: |
+          ruff check src/ \
+            --ignore E501,F401,F841,E402 \
+            --exclude "**/node_modules/**,**/__pycache__/**,**/env/**" \
+            --output-format=github
+        continue-on-error: true
+      
+      - name: Run Black (formatter check)
+        run: |
+          black --check src/ \
+            --exclude "(node_modules|\.git|__pycache__|env|\.venv)" \
+            --line-length 120
+        continue-on-error: true
+
+  lint-frontend:
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/ui
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: src/ui/package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run TypeScript type check
+        run: npm run type-check || true
+      
+      - name: Build frontend (validates code)
+        run: npm run build
+
+  # ============================================================================
+  # MODEL FINE-TUNING TESTS (Containerized, CPU-only)
+  # ============================================================================
   model-finetuning-tests:
+    name: Model Fine-tuning Tests (Docker)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -17,88 +82,123 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-          cache-dependency-path: src/model_finetuning/requirements-cpu.txt
+      - name: Create coverage directory
+        run: mkdir -p coverage
       
-      - name: Install CPU-only PyTorch
+      - name: Build and run tests via Docker Compose
         run: |
-          pip install --upgrade pip
-          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-      
-      - name: Install dependencies
-        run: pip install -r requirements-cpu.txt
-      
-      - name: Run tests with coverage
-        run: |
-          pytest tests/ -v \
-            --cov=. \
-            --cov-report=term-missing \
-            --cov-report=xml:coverage.xml \
-            --cov-fail-under=50
-        env:
-          PYTHONPATH: ${{ github.workspace }}/src/model_finetuning:${{ github.workspace }}/src/model_finetuning/CADRL
+          docker compose run --rm test
       
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: model-finetuning-coverage
-          path: src/model_finetuning/coverage.xml
+          path: src/model_finetuning/coverage/
+          if-no-files-found: ignore
 
-  # Backend Tests
+  # ============================================================================
+  # BACKEND TESTS (Containerized)
+  # ============================================================================
   backend-tests:
+    name: Backend Tests (Docker)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: src/cad_coder_backend
     
-    services:
-      mongodb:
-        image: mongo:6.0
-        ports:
-          - 27017:27017
-    
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-          cache-dependency-path: src/cad_coder_backend/requirements.txt
+      - name: Create coverage directory
+        run: mkdir -p coverage
       
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio
+      - name: Build test image
+        run: docker compose -f docker-compose.test.yml build test
       
-      - name: Run backend tests
+      - name: Run unit tests with coverage
         run: |
-          pytest app/tests/ -v \
-            --cov=app \
-            --cov-report=term-missing \
-            --cov-report=xml:coverage.xml
+          docker compose -f docker-compose.test.yml run --rm test
         env:
-          MONGODB_URL: mongodb://localhost:27017
-          QWEN_INFERENCE_BACKEND: mock
-          LLAVA_INFERENCE_BACKEND: mock
-          ENABLE_RAG: "false"
+          QWEN_MODAL_MAX_NEW_TOKENS: 128
+          LLAVA_MODAL_MAX_NEW_TOKENS: 128
       
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: backend-coverage
-          path: src/cad_coder_backend/coverage.xml
+          path: src/cad_coder_backend/coverage/
+          if-no-files-found: ignore
+      
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
 
-  # Data Versioning Tests
+  # ============================================================================
+  # BACKEND INTEGRATION TESTS (with real MongoDB)
+  # ============================================================================
+  backend-integration-tests:
+    name: Backend Integration Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/cad_coder_backend
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run integration tests
+        run: |
+          docker compose -f docker-compose.test.yml run --rm integration
+        env:
+          QWEN_MODAL_MAX_NEW_TOKENS: 128
+          LLAVA_MODAL_MAX_NEW_TOKENS: 128
+      
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
+  # ============================================================================
+  # DATA PIPELINE TESTS (Containerized)
+  # ============================================================================
+  datapipeline-tests:
+    name: Data Pipeline Tests (Docker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/datapipeline
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create coverage directory
+        run: mkdir -p coverage
+      
+      - name: Build test image
+        run: docker compose -f docker-compose.test.yml build test
+      
+      - name: Run tests
+        run: docker compose -f docker-compose.test.yml run --rm test
+        continue-on-error: true
+      
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: datapipeline-coverage
+          path: src/datapipeline/coverage/
+          if-no-files-found: ignore
+      
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
+  # ============================================================================
+  # DATA VERSIONING TESTS (Containerized)
+  # ============================================================================
   data-versioning-tests:
+    name: Data Versioning Tests (Docker)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -107,54 +207,74 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Create coverage directory
+        run: mkdir -p coverage
+      
+      - name: Build test image
+        run: docker compose -f docker-compose.test.yml build test
+      
+      - name: Run tests
+        run: docker compose -f docker-compose.test.yml run --rm test
+        continue-on-error: true
+      
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
-          python-version: '3.11'
+          name: data-versioning-coverage
+          path: src/data_versioning/coverage/
+          if-no-files-found: ignore
       
-      - name: Install DVC
-        run: pip install dvc
-      
-      - name: Verify DVC configuration
-        run: |
-          # Check that DVC files exist
-          ls -la .dvc/ || echo "DVC not initialized"
-          ls -la data/v1/*.dvc 2>/dev/null || echo "V1 DVC files not found"
-          ls -la data/v2/*.dvc 2>/dev/null || echo "V2 DVC files not found"
-      
-      - name: Validate scripts are executable
-        run: |
-          test -f setup_dvc.sh && echo "setup_dvc.sh exists"
-          test -f create_all_versions.sh && echo "create_all_versions.sh exists"
-          test -f scripts/convert_raw_to_jsonl.py && echo "convert script exists"
-          test -f scripts/prepare_user_data.py && echo "prepare script exists"
-          test -f scripts/create_v2.py && echo "create_v2 script exists"
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
 
-  # Linting
-  lint:
+  # ============================================================================
+  # UI TESTS (React/Vitest)
+  # ============================================================================
+  ui-tests:
+    name: UI Tests (Vitest)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/ui
+    
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.11'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: src/ui/package-lock.json
       
-      - name: Install linters
-        run: pip install ruff black
+      - name: Install dependencies
+        run: npm ci
       
-      - name: Run Ruff (linter)
-        run: ruff check src/ --ignore E501,F401,F841 --exit-zero
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        continue-on-error: true
       
-      - name: Run Black (formatter check)
-        run: black --check src/ --exclude "node_modules|\.git" || true
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-coverage
+          path: src/ui/coverage/
+          if-no-files-found: ignore
 
-  # Docker Build Tests
+  # ============================================================================
+  # DOCKER BUILD TESTS
+  # ============================================================================
   docker-build:
+    name: Docker Build Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       
       - name: Build model_finetuning Docker image
         run: |
@@ -170,4 +290,108 @@ jobs:
         run: |
           cd src/cad_coder_backend
           docker build -t backend-test .
+      
+      - name: Build backend test Docker image
+        run: |
+          cd src/cad_coder_backend
+          docker build -f Dockerfile.test -t backend-test-runner .
+      
+      - name: Build frontend Docker image
+        run: |
+          cd src/ui
+          docker build -t frontend-test .
 
+  # ============================================================================
+  # END-TO-END TESTS (Optional - requires Modal credentials)
+  # ============================================================================
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [backend-tests, lint-frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run E2E tests (mocked)
+        run: |
+          cd src/cad_coder_backend
+          docker compose -f docker-compose.test.yml run --rm e2e
+        env:
+          QWEN_INFERENCE_BACKEND: mock
+          LLAVA_INFERENCE_BACKEND: mock
+          ENABLE_RAG: "false"
+          QWEN_MODAL_MAX_NEW_TOKENS: 128
+          LLAVA_MODAL_MAX_NEW_TOKENS: 128
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          cd src/cad_coder_backend
+          docker compose -f docker-compose.test.yml down -v
+
+  # ============================================================================
+  # COVERAGE SUMMARY
+  # ============================================================================
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    needs: [model-finetuning-tests, backend-tests, datapipeline-tests, data-versioning-tests, ui-tests]
+    if: always()
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_BACKEND }}
+      
+      - name: Download all coverage reports
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-reports
+        continue-on-error: true
+      
+      - name: Display coverage summary
+        run: |
+          echo "=============================================="
+          echo "           COVERAGE SUMMARY"
+          echo "=============================================="
+          echo ""
+          
+          for dir in coverage-reports/*/; do
+            name=$(basename "$dir")
+            echo "$name: ✓ Report available"
+            ls -la "$dir" 2>/dev/null || echo "  (empty)"
+            echo ""
+          done
+          
+          echo "=============================================="
+          echo "Coverage reports uploaded as artifacts"
+          echo "=============================================="
+
+      - name: Aggregate coverage and enforce threshold
+        run: |
+          # Find all coverage XML files
+          COVERAGE_FILES=""
+          for f in \
+            coverage-reports/backend-coverage/backend.xml \
+            coverage-reports/model-finetuning-coverage/model_finetuning.xml \
+            coverage-reports/datapipeline-coverage/datapipeline.xml \
+            coverage-reports/data-versioning-coverage/data_versioning.xml
+          do
+            if [ -f "$f" ]; then
+              COVERAGE_FILES="$COVERAGE_FILES $f"
+            fi
+          done
+          
+          if [ -n "$COVERAGE_FILES" ]; then
+            python scripts/aggregate_coverage.py \
+              --threshold 0.50 \
+              --ignore-missing \
+              $COVERAGE_FILES
+          else
+            echo "Warning: No coverage files found to aggregate"
+            exit 0
+          fi

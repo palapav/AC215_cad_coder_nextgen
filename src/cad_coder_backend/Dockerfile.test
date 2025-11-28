@@ -1,0 +1,38 @@
+# Dockerfile for backend testing (CI/CD)
+# Lightweight image for running unit, integration, and E2E tests
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for caching
+COPY requirements.txt .
+COPY requirements-test.txt .
+
+# Install dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-test.txt
+
+# Copy source code
+COPY . .
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Default environment for testing (mocked backends)
+ENV QWEN_INFERENCE_BACKEND=mock
+ENV LLAVA_INFERENCE_BACKEND=mock
+ENV ENABLE_RAG=false
+ENV MONGO_URI=mongodb://mongo:27017
+ENV MONGO_DB=test_cad_coder
+
+# Default command: run all tests
+CMD ["pytest", "app/tests/", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=xml:coverage.xml"]
+

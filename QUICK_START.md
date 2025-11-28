@@ -101,6 +101,7 @@ docker compose up -d --build backend mongo
 ```bash
 cd src/cad_coder_backend
 bash test.sh
+bash test_basic.sh
 ```
 
 You should see a JSON response with real CAD code. The API supports:
@@ -224,6 +225,22 @@ docker compose run --rm dvc bash -c "wc -l data/v1/*.jsonl data/v2/*.jsonl"
 ```
 
 For complete documentation, see `src/data_versioning/DATA_VERSIONING.md`.
+
+---
+
+## Run the Full Test Suite
+
+Use one command to execute backend (unit/integration/E2E), model fine-tuning, and coverage aggregation:
+
+```bash
+# Option 1: bash helper
+./scripts/run_all_tests.sh
+
+# Option 2: Docker Compose stack
+docker compose -f docker-compose.tests.yml up --build repo-tests --abort-on-container-exit
+```
+
+Both approaches enforce the global ≥50% coverage requirement by aggregating the backend and model fine-tuning reports (Modal Labs and Google Cloud APIs are mocked, so no external credentials are required).
 
 ---
 

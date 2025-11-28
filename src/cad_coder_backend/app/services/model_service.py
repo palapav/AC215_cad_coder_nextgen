@@ -10,6 +10,8 @@ load_dotenv()
 
 from app.services import rag_service
 
+from PIL import Image
+
 logger = logging.getLogger(__name__)
 
 
@@ -204,21 +206,19 @@ async def generate_cad_code(
         }
 
     # ---------------------------------------------------------------------------
-    # LLaVA Inference Path (no RAG, requires image)
+    # LLaVA Inference Path (no RAG, image optional – falls back to Qwen)
     # ---------------------------------------------------------------------------
     if model_choice_value == ModelChoice.LLAVA.value:
-        # Use image_reference if image is not provided
+        # Use image_reference if provided (e.g., stored path), otherwise raw image.
         actual_image = image if image is not None else image_reference
-        
+
         if actual_image is None:
-            logger.warning("[Model Service] LLaVA requires an image but none provided")
-            return {
-                "cad_code": "# Error: LLaVA CAD-Coder requires an image input.\nimport cadquery as cq\ncq.Workplane('XY').box(1,1,1)",
-                "rag_used": False,
-                "rag_context": None,
-                "rag_results": [],
-            }
-        
+            logger.info(
+                "[Model Service] No image supplied for LLaVA request; "
+                "using a blank placeholder image to keep inference on LLaVA."
+            )
+            actual_image = Image.new("RGB", (336, 336), color=(0, 0, 0))
+
         try:
             cad_text = await _run_llava_via_modal(prompt=prompt, image=actual_image)
         except Exception as exc:
