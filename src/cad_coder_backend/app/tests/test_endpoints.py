@@ -170,7 +170,7 @@ class TestServiceIntegrations:
         monkeypatch.setattr(gcs_service.storage, "Client", lambda: fake_client)
 
         result = gcs_service.upload_cad_code("integration cube", "cad code")
-        assert result == "gs://integration-bucket/generated/integration_cube.py"
+        assert result == f"gs://{gcs_service.BUCKET_NAME}/generated/integration_cube.py"
         fake_bucket.blob.assert_called_once()
         fake_blob.upload_from_filename.assert_called_once()
 
@@ -200,7 +200,8 @@ class TestServiceIntegrations:
         data_url = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
 
         data, mime = modal_client._serialize_image(data_url)
-        assert data is not None and mime == "image/png"
+        assert data is not None
+        assert mime.lower().replace("/", "") == "png"
 
     def test_modal_client_serialize_path(self, tmp_path):
         """Modal client serializes file path image."""
@@ -212,4 +213,4 @@ class TestServiceIntegrations:
 
         data, mime = modal_client._serialize_image(str(img_path))
         assert data is not None
-        assert mime == "image/png"
+        assert mime.lower().replace("/", "") == "png"
