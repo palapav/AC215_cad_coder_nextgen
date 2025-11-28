@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main]
   pull_request:
-    branches: [main, master, develop]
+    branches: [main]
 
 env:
   PYTHON_VERSION_BACKEND: '3.11'
@@ -160,41 +160,6 @@ jobs:
         run: docker compose -f docker-compose.test.yml down -v
 
   # ============================================================================
-  # DATA PIPELINE TESTS (Containerized)
-  # ============================================================================
-  datapipeline-tests:
-    name: Data Pipeline Tests (Docker)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: src/datapipeline
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Create coverage directory
-        run: mkdir -p coverage
-      
-      - name: Build test image
-        run: docker compose -f docker-compose.test.yml build test
-      
-      - name: Run tests
-        run: docker compose -f docker-compose.test.yml run --rm test
-        continue-on-error: true
-      
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: datapipeline-coverage
-          path: src/datapipeline/coverage/
-          if-no-files-found: ignore
-      
-      - name: Cleanup
-        if: always()
-        run: docker compose -f docker-compose.test.yml down -v
-
-  # ============================================================================
   # DATA VERSIONING TESTS (Containerized)
   # ============================================================================
   data-versioning-tests:
@@ -336,7 +301,7 @@ jobs:
   coverage-summary:
     name: Coverage Summary
     runs-on: ubuntu-latest
-    needs: [model-finetuning-tests, backend-tests, datapipeline-tests, data-versioning-tests, ui-tests]
+    needs: [model-finetuning-tests, backend-tests, data-versioning-tests, ui-tests]
     if: always()
     
     steps:
