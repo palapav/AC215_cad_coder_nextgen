@@ -431,14 +431,13 @@ class TestModalClient:
             assert isinstance(result, str)
             assert "cadquery" in result.lower()
 
-    def test_lookup_qwen_modal_function_missing_config(self, monkeypatch):
-        """Test Qwen Modal lookup raises error when config missing."""
+    def test_lookup_qwen_modal_function_missing_credentials(self, monkeypatch):
+        """Test Qwen Modal lookup raises error when credentials missing."""
         from app.services.modal_client import _lookup_qwen_modal_function, ModalConfigError
         
-        monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
-        monkeypatch.setenv("MODAL_TOKEN_SECRET", "test_secret")
-        monkeypatch.delenv("QWEN_MODAL_APP", raising=False)
-        monkeypatch.delenv("QWEN_MODAL_FUNCTION", raising=False)
+        # Remove Modal credentials to trigger ModalConfigError
+        monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
+        monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
         
         # Clear cache if it exists
         try:
@@ -449,14 +448,13 @@ class TestModalClient:
         with pytest.raises(ModalConfigError):
             _lookup_qwen_modal_function()
 
-    def test_lookup_llava_modal_function_missing_config(self, monkeypatch):
-        """Test LLaVA Modal lookup raises error when config missing."""
+    def test_lookup_llava_modal_function_missing_credentials(self, monkeypatch):
+        """Test LLaVA Modal lookup raises error when credentials missing."""
         from app.services.modal_client import _lookup_llava_modal_function, ModalConfigError
         
-        monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
-        monkeypatch.setenv("MODAL_TOKEN_SECRET", "test_secret")
-        monkeypatch.delenv("LLAVA_MODAL_APP", raising=False)
-        monkeypatch.delenv("LLAVA_MODAL_FUNCTION", raising=False)
+        # Remove Modal credentials to trigger ModalConfigError
+        monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
+        monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
         
         # Clear cache if it exists
         try:
@@ -1342,19 +1340,24 @@ class TestLoggerService:
 
     def test_get_logger_different_levels(self, tmp_path, monkeypatch):
         """Test logger with different log levels."""
-        monkeypatch.setenv("LOG_PATH", str(tmp_path / "test.log"))
+        log_file = tmp_path / "test_levels.log"
+        monkeypatch.setenv("LOG_PATH", str(log_file))
         from app.services import logger as logger_module
 
         importlib.reload(logger_module)
 
-        logger_instance = logger_module.get_logger("test_logger")
+        logger_instance = logger_module.get_logger("test_logger_levels")
         logger_instance.debug("debug message")
         logger_instance.info("info message")
         logger_instance.warning("warning message")
         logger_instance.error("error message")
+        
+        # Flush handlers to ensure all logs are written
+        for handler in logger_instance.handlers:
+            handler.flush()
 
-        log_file = tmp_path / "test.log"
-        assert log_file.exists()
+        # File should be created after logging
+        assert log_file.exists(), f"Log file not found at {log_file}"
         contents = log_file.read_text()
         assert "info message" in contents
         assert "warning message" in contents

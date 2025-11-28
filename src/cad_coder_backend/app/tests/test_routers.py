@@ -13,6 +13,15 @@ from app.main import app
 client = TestClient(app)
 
 
+# Auto-mock add_record for all generate tests to prevent DB calls
+@pytest.fixture(autouse=True)
+def mock_add_record():
+    """Mock add_record to prevent actual DB calls during tests."""
+    with patch('app.routers.generate.add_record') as mock:
+        mock.return_value = None
+        yield mock
+
+
 # ============================================================================
 # Health Router Tests
 # ============================================================================
@@ -52,7 +61,7 @@ class TestGenerateRouter:
     @pytest.mark.e2e
     def test_generate_cad_llava(self):
         """Test generate endpoint with LLaVA model."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = {
                 "cad_code": "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)",
                 "rag_used": False,
@@ -74,7 +83,7 @@ class TestGenerateRouter:
     @pytest.mark.e2e
     def test_generate_cad_qwen(self):
         """Test generate endpoint with Qwen model."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = {
                 "cad_code": "import cadquery as cq\nresult = cq.Workplane('XY').sphere(0.5)",
                 "rag_used": True,
@@ -96,7 +105,7 @@ class TestGenerateRouter:
 
     def test_generate_cad_empty_prompt(self):
         """Test generate endpoint with empty prompt."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = {
                 "cad_code": "# placeholder",
                 "rag_used": False,
@@ -115,7 +124,7 @@ class TestGenerateRouter:
     @pytest.mark.e2e
     def test_generate_cad_with_image_reference(self):
         """Test generate endpoint with image reference."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = {
                 "cad_code": "import cadquery as cq",
                 "rag_used": False,
@@ -134,7 +143,7 @@ class TestGenerateRouter:
     @pytest.mark.e2e
     def test_generate_cad_empty_prompt_with_image(self):
         """Test generate endpoint with empty prompt but image provided."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = {
                 "cad_code": "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)",
                 "rag_used": False,
@@ -156,7 +165,7 @@ class TestGenerateRouter:
 
     def test_generate_cad_empty_prompt_no_image(self):
         """Test generate endpoint with empty prompt and no image."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = {
                 "cad_code": "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)",
                 "rag_used": False,
@@ -177,7 +186,7 @@ class TestGenerateRouter:
 
     def test_generate_cad_invalid_base64_image(self):
         """Test generate endpoint with invalid base64 image."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock):
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock):
             response = client.post("/generate_cad", json={
                 "prompt": "test",
                 "model_choice": "llava",
@@ -189,7 +198,7 @@ class TestGenerateRouter:
 
     def test_generate_cad_empty_cad_code(self):
         """Test generate endpoint when model returns empty CAD code."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = {
                 "cad_code": "",
                 "rag_used": False,
@@ -214,7 +223,7 @@ class TestGenerateRouter:
         img = Image.new('RGB', (50, 50), color='green')
         img.save(img_path)
         
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = {
                 "cad_code": "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)",
                 "rag_used": False,
@@ -232,7 +241,7 @@ class TestGenerateRouter:
 
     def test_generate_cad_model_service_exception(self):
         """Test generate endpoint handles model service exceptions."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             mock_gen.side_effect = Exception("Model service error")
             
             response = client.post("/generate_cad", json={
@@ -245,7 +254,7 @@ class TestGenerateRouter:
 
     def test_generate_cad_llava_backend_disabled(self):
         """Test generate endpoint when LLaVA backend is disabled."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             # Simulate RuntimeError from disabled backend
             mock_gen.side_effect = RuntimeError(
                 "Modal backend disabled but LLaVA model requested. "
@@ -263,7 +272,7 @@ class TestGenerateRouter:
 
     def test_generate_cad_qwen_backend_disabled(self):
         """Test generate endpoint when Qwen backend is disabled."""
-        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
             # Simulate RuntimeError from disabled backend
             mock_gen.side_effect = RuntimeError(
                 "Modal backend disabled but Qwen model requested. "

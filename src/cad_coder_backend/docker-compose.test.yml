@@ -67,8 +67,9 @@ services:
       mongo-test:
         condition: service_healthy
     command: >
-      pytest app/tests/test_routers.py -v 
+      pytest app/tests/test_routers.py app/tests/test_endpoints.py -v 
       --cov=app 
+      --cov-config=.coveragerc
       --cov-report=term-missing
       -m "not e2e"
 

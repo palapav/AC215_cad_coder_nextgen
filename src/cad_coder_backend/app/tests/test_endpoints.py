@@ -1,11 +1,20 @@
 """Basic endpoint tests for the FastAPI application."""
 from fastapi.testclient import TestClient
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, AsyncMock
 import pytest
 
 from app.main import app
 
 client = TestClient(app)
+
+
+# Auto-mock add_record for all generate tests to prevent DB calls
+@pytest.fixture(autouse=True)
+def mock_add_record():
+    """Mock add_record to prevent actual DB calls during tests."""
+    with patch('app.routers.generate.add_record') as mock:
+        mock.return_value = None
+        yield mock
 
 
 # ---------------------------
@@ -26,16 +35,25 @@ def test_health_check():
 @pytest.mark.parametrize("model_choice", ["llava", "qwen"])
 def test_generate_cad(model_choice):
     """Test CAD generation endpoint with different models."""
-    payload = {
-        "prompt": "generate a cube",
-        "model_choice": model_choice,
-        "user_id": "test_user"
-    }
-    response = client.post("/generate_cad", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "cad_code" in data
-    assert data["model"] == model_choice
+    # Mock at the router level where the function is imported
+    with patch('app.routers.generate.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+        mock_gen.return_value = {
+            "cad_code": "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)",
+            "rag_used": False,
+            "rag_context": None,
+            "rag_results": []
+        }
+        
+        payload = {
+            "prompt": "generate a cube",
+            "model_choice": model_choice,
+            "user_id": "test_user"
+        }
+        response = client.post("/generate_cad", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert "cad_code" in data
+        assert data["model"] == model_choice
 
 
 # ---------------------------
