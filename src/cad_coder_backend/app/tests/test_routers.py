@@ -49,6 +49,7 @@ class TestRootEndpoint:
 class TestGenerateRouter:
     """Test CAD generation endpoints."""
 
+    @pytest.mark.e2e
     def test_generate_cad_llava(self):
         """Test generate endpoint with LLaVA model."""
         with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
@@ -70,6 +71,7 @@ class TestGenerateRouter:
             assert "cad_code" in data
             assert data["model"] == "llava"
 
+    @pytest.mark.e2e
     def test_generate_cad_qwen(self):
         """Test generate endpoint with Qwen model."""
         with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
@@ -110,6 +112,7 @@ class TestGenerateRouter:
             # Should still work (empty prompt is valid)
             assert response.status_code == 200
 
+    @pytest.mark.e2e
     def test_generate_cad_with_image_reference(self):
         """Test generate endpoint with image reference."""
         with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
@@ -128,6 +131,7 @@ class TestGenerateRouter:
             
             assert response.status_code == 200
 
+    @pytest.mark.e2e
     def test_generate_cad_empty_prompt_with_image(self):
         """Test generate endpoint with empty prompt but image provided."""
         with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
@@ -201,6 +205,7 @@ class TestGenerateRouter:
             assert response.status_code == 500
             assert "empty or None" in response.json()["detail"]
 
+    @pytest.mark.e2e
     def test_generate_cad_with_file_path_image(self, tmp_path):
         """Test generate endpoint with file path image."""
         from PIL import Image

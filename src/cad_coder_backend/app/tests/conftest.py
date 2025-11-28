@@ -87,8 +87,10 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(config, items):
     """Skip E2E tests unless explicitly requested."""
-    # Check if we're running E2E tests
-    run_e2e = config.getoption("-m", default="") == "e2e"
+    # Check if we're running E2E tests by checking marker expression
+    # getoption returns None if not set, or the value if set
+    marker_expr = config.getoption("-m", default=None)
+    run_e2e = marker_expr is not None and "e2e" in str(marker_expr).lower()
     
     if not run_e2e:
         skip_e2e = pytest.mark.skip(reason="E2E tests skipped (use -m e2e to run)")
