@@ -1,0 +1,22 @@
+{
+  "Best of N": {
+    "Valid Sample Rate (%)": 96.97265625,
+    "Mean IOU": 0.5631877215673124,
+    "Median IOU": 0.6172518553918928,
+    "Mean IOU (Adjusted)": 0.5461380932776772
+  },
+  "Full Set": {
+    "Valid Sample Rate (%)": 96.97265625,
+    "Mean IOU": 0.5631877215673124,
+    "Median IOU": 0.6172518553918928,
+    "Mean IOU (Adjusted)": 0.5461380932776772
+  },
+  "Error Analysis": {
+    "Failed GT (%)": 0.0,
+    "Failed Gen (%)": 1.7578125,
+    "Failed OCC (%)": 0.87890625,
+    "Timeouts (%)": 0.390625,
+    "None Solids (%)": 0.0,
+    "Failed Processing (%)": 0.0
+  }
+}

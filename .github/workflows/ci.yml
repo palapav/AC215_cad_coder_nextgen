@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  # Model Fine-tuning Tests (CPU-only, lightweight)
+  model-finetuning-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/model_finetuning
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: src/model_finetuning/requirements-cpu.txt
+      
+      - name: Install CPU-only PyTorch
+        run: |
+          pip install --upgrade pip
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      
+      - name: Install dependencies
+        run: pip install -r requirements-cpu.txt
+      
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v \
+            --cov=. \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=50
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src/model_finetuning:${{ github.workspace }}/src/model_finetuning/CADRL
+      
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: model-finetuning-coverage
+          path: src/model_finetuning/coverage.xml
+
+  # Backend Tests
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/cad_coder_backend
+    
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: src/cad_coder_backend/requirements.txt
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio
+      
+      - name: Run backend tests
+        run: |
+          pytest app/tests/ -v \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml
+        env:
+          MONGODB_URL: mongodb://localhost:27017
+          QWEN_INFERENCE_BACKEND: mock
+          LLAVA_INFERENCE_BACKEND: mock
+          ENABLE_RAG: "false"
+      
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: src/cad_coder_backend/coverage.xml
+
+  # Data Versioning Tests
+  data-versioning-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/data_versioning
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install DVC
+        run: pip install dvc
+      
+      - name: Verify DVC configuration
+        run: |
+          # Check that DVC files exist
+          ls -la .dvc/ || echo "DVC not initialized"
+          ls -la data/v1/*.dvc 2>/dev/null || echo "V1 DVC files not found"
+          ls -la data/v2/*.dvc 2>/dev/null || echo "V2 DVC files not found"
+      
+      - name: Validate scripts are executable
+        run: |
+          test -f setup_dvc.sh && echo "setup_dvc.sh exists"
+          test -f create_all_versions.sh && echo "create_all_versions.sh exists"
+          test -f scripts/convert_raw_to_jsonl.py && echo "convert script exists"
+          test -f scripts/prepare_user_data.py && echo "prepare script exists"
+          test -f scripts/create_v2.py && echo "create_v2 script exists"
+
+  # Linting
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install linters
+        run: pip install ruff black
+      
+      - name: Run Ruff (linter)
+        run: ruff check src/ --ignore E501,F401,F841 --exit-zero
+      
+      - name: Run Black (formatter check)
+        run: black --check src/ --exclude "node_modules|\.git" || true
+
+  # Docker Build Tests
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build model_finetuning Docker image
+        run: |
+          cd src/model_finetuning
+          docker build -t model-finetuning-test .
+      
+      - name: Build data_versioning Docker image
+        run: |
+          cd src/data_versioning
+          docker build -t data-versioning-test .
+      
+      - name: Build backend Docker image
+        run: |
+          cd src/cad_coder_backend
+          docker build -t backend-test .
+

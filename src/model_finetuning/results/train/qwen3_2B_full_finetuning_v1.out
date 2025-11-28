@@ -1,0 +1,155 @@
+=== Environment Setup ===
+nvcc: NVIDIA (R) Cuda compiler driver
+which python: /orcd/compute/faez/001/miniforge3/envs/apalapar_fedvlm4cadcode/bin/python
+Executable: /orcd/compute/faez/001/miniforge3/envs/apalapar_fedvlm4cadcode/bin/python
+PyTorch CUDA: 12.4
+CUDA_HOME: /orcd/software/core/001/pkg/cuda/12.4
+CUDA available: True
+GPU count: 4
+GPU 0: NVIDIA H100 80GB HBM3
+HF Cache: /home/apalapar/orcd/scratch/FedVLM4CAD-Code/hf
+peft: 0.17.1
+bitsandbytes: 0.46.0
+=========================
+Starting centralized fine-tuning (FULL, NO LoRA)...
+  Dataset: full (147K samples)
+  Model: Qwen/Qwen3-VL-2B-Instruct
+  GPUs: 4
+  Batch size per GPU: 4
+  Gradient accumulation: 16
+  Effective batch size: 256
+  Total steps: ~4603 steps
+  Estimated time: ~15 hours
+  Validation: every 500 steps
+  NOTE: Full fine-tuning (all parameters trainable except vision)
+
+=== Centralized Training ===
+Model: Qwen/Qwen3-VL-2B-Instruct
+Output: /home/apalapar/orcd/scratch/FedVLM4CAD-Code/checkpoints/centralized/full_finetune_full
+=== Loading Cached Combined Dataset ===
+Loading from: ./data/partitioned/combined
+✓ Loaded: 147289 samples
+Loading processor...
+=== Centralized Training ===
+Model: Qwen/Qwen3-VL-2B-Instruct
+Output: /home/apalapar/orcd/scratch/FedVLM4CAD-Code/checkpoints/centralized/full_finetune_full
+=== Loading Cached Combined Dataset ===
+Loading from: ./data/partitioned/combined
+✓ Loaded: 147289 samples
+Loading processor...
+=== Centralized Training ===
+Model: Qwen/Qwen3-VL-2B-Instruct
+Output: /home/apalapar/orcd/scratch/FedVLM4CAD-Code/checkpoints/centralized/full_finetune_full
+=== Loading Cached Combined Dataset ===
+Loading from: ./data/partitioned/combined
+✓ Loaded: 147289 samples
+Loading processor...
+=== Centralized Training ===
+Model: Qwen/Qwen3-VL-2B-Instruct
+Output: /home/apalapar/orcd/scratch/FedVLM4CAD-Code/checkpoints/centralized/full_finetune_full
+=== Loading Cached Combined Dataset ===
+Loading from: ./data/partitioned/combined
+✓ Loaded: 147289 samples
+Loading processor...
+Training dataset: 147289 samples
+
+Loading validation dataset from: ./data/partitioned/validation
+Training dataset: 147289 samples
+
+Loading validation dataset from: ./data/partitioned/validation
+  Subsampled to 500 examples (for speed)
+✓ Validation dataset: 500 samples
+Loading model: Qwen/Qwen3-VL-2B-Instruct
+  Subsampled to 500 examples (for speed)
+✓ Validation dataset: 500 samples
+Loading model: Qwen/Qwen3-VL-2B-Instruct
+Training dataset: 147289 samples
+
+Loading validation dataset from: ./data/partitioned/validation
+  Subsampled to 500 examples (for speed)
+✓ Validation dataset: 500 samples
+Loading model: Qwen/Qwen3-VL-2B-Instruct
+✓ Froze vision encoder: visual
+
+Training config:
+  Epochs: 1
+  Steps/epoch: 2302
+  Total steps: 2302
+  Batch size: 4
+  Grad accum: 16
+  Effective batch: 64
+  Checkpoint every: 99999 steps
+✓ Froze vision encoder: visual
+
+Training config:
+  Epochs: 1
+  Steps/epoch: 2302
+  Total steps: 2302
+  Batch size: 4
+  Grad accum: 16
+  Effective batch: 64
+  Checkpoint every: 99999 steps
+✓ Froze vision encoder: visual
+
+Training config:
+  Epochs: 1
+  Steps/epoch: 2302
+  Total steps: 2302
+  Batch size: 4
+  Grad accum: 16
+  Effective batch: 64
+  Checkpoint every: 99999 steps
+Training dataset: 147289 samples
+
+Loading validation dataset from: ./data/partitioned/validation
+  Subsampled to 500 examples (for speed)
+✓ Validation dataset: 500 samples
+Loading model: Qwen/Qwen3-VL-2B-Instruct
+✓ Froze vision encoder: visual
+
+Training config:
+  Epochs: 1
+  Steps/epoch: 2302
+  Total steps: 2302
+  Batch size: 4
+  Grad accum: 16
+  Effective batch: 64
+  Checkpoint every: 99999 steps
+
+Starting training...
+✓ Validation evaluation enabled (every 500 steps)
+
+Starting training...
+✓ Validation evaluation enabled (every 500 steps)
+
+Starting training...
+✓ Validation evaluation enabled (every 500 steps)
+
+Starting training...
+✓ Validation evaluation enabled (every 500 steps)
+
+=== Epoch 1/1 ===
+
+  📊 Validation Loss: 0.0712
+  ⭐ New best val_loss: 0.0712
+Epoch 1 avg loss: 0.1070
+
+💾 Saving final model...
+
+💾 Saving final model...
+
+💾 Saving final model...
+
+💾 Saving final model...
+✓ Training complete!
+Final model: /home/apalapar/orcd/scratch/FedVLM4CAD-Code/checkpoints/centralized/full_finetune_full/final_model.pt
+✓ Training complete!
+Final model: /home/apalapar/orcd/scratch/FedVLM4CAD-Code/checkpoints/centralized/full_finetune_full/final_model.pt
+✓ Training complete!
+Final model: /home/apalapar/orcd/scratch/FedVLM4CAD-Code/checkpoints/centralized/full_finetune_full/final_model.pt
+✓ Training complete!
+Final model: /home/apalapar/orcd/scratch/FedVLM4CAD-Code/checkpoints/centralized/full_finetune_full/final_model.pt
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33mcentralized_2B_full_finetune_1_epoch_partitioned_full_4gpu[0m at: [34mhttps://wandb.ai/sf-gfn-team/Centralized-CADCoder/runs/4nsrmcul[0m
+[1;34mwandb[0m: Find logs at: [1;35m../../../../orcd/home/002/apalapar/projects/FedVLM4CAD-Code/wandb/run-20251120_040455-4nsrmcul/logs[0m
+=== SLURM job finished at Thu Nov 20 09:21:27 EST 2025 ===

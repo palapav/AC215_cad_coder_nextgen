@@ -187,6 +187,46 @@ docker compose --profile pipeline up preprocess rag
 
 ---
 
+## Data Versioning (DVC)
+
+The project uses DVC (Data Version Control) for dataset versioning. All data versioning is containerized.
+
+### Quick Start
+
+```bash
+cd src/data_versioning
+
+# Build the Docker image
+docker compose build
+
+# Run interactive container
+docker compose run --rm dvc
+
+# Inside container: Check DVC status
+dvc status
+```
+
+### Create Dataset Versions
+
+```bash
+# Create V1 (baseline) and V2 (with user data)
+docker compose run --rm dvc bash -c "./create_all_versions.sh && ./setup_dvc.sh"
+```
+
+### Verify Data
+
+```bash
+# Check tracked files
+docker compose run --rm dvc dvc status
+
+# Count records
+docker compose run --rm dvc bash -c "wc -l data/v1/*.jsonl data/v2/*.jsonl"
+```
+
+For complete documentation, see `src/data_versioning/DATA_VERSIONING.md`.
+
+---
+
 ## Complete `.env` Template
 
 Here's a complete template for `src/.env`:
