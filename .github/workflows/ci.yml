@@ -273,27 +273,65 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [backend-tests, lint-frontend]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: |
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Run E2E tests (mocked)
+      - name: Create test environment file (optional)
+        run: |
+          # Create .env.test only if secrets are available (for real E2E testing)
+          # Otherwise, tests will use mocked backends via environment variables
+          if [ -n "${{ secrets.MODAL_TOKEN_ID }}" ] && [ -n "${{ secrets.MODAL_TOKEN_SECRET }}" ]; then
+            cat > src/.env.test << EOF
+          MONGO_URI=mongodb://mongo-test:27017
+          MONGO_DB=test_e2e
+          MODAL_TOKEN_ID=${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET=${{ secrets.MODAL_TOKEN_SECRET }}
+          QWEN_MODAL_APP=${{ secrets.QWEN_MODAL_APP || 'cad-coder-qwen3' }}
+          QWEN_MODAL_FUNCTION=${{ secrets.QWEN_MODAL_FUNCTION || 'qwen_modal_infer' }}
+          LLAVA_MODAL_APP=${{ secrets.LLAVA_MODAL_APP || 'cad-coder-llava' }}
+          LLAVA_MODAL_FUNCTION=${{ secrets.LLAVA_MODAL_FUNCTION || 'llava_modal_infer' }}
+          QWEN_MODAL_MAX_NEW_TOKENS=128
+          LLAVA_MODAL_MAX_NEW_TOKENS=128
+          QWEN_MODAL_TEMPERATURE=0.0
+          LLAVA_MODAL_TEMPERATURE=0.0
+          ENABLE_RAG=false
+          EOF
+            echo "Created .env.test with Modal credentials"
+          else
+            echo "No Modal credentials found - using mocked backends"
+          fi
+        continue-on-error: true
+      
+      - name: Run E2E tests
         run: |
           cd src/cad_coder_backend
           docker compose -f docker-compose.test.yml run --rm e2e
         env:
+          # Use mocked backends by default (override if .env.test created above)
           QWEN_INFERENCE_BACKEND: mock
           LLAVA_INFERENCE_BACKEND: mock
           ENABLE_RAG: "false"
           QWEN_MODAL_MAX_NEW_TOKENS: 128
           LLAVA_MODAL_MAX_NEW_TOKENS: 128
+          # Pass secrets as env vars if available (empty strings if not set)
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          QWEN_MODAL_APP: ${{ secrets.QWEN_MODAL_APP }}
+          QWEN_MODAL_FUNCTION: ${{ secrets.QWEN_MODAL_FUNCTION }}
+          LLAVA_MODAL_APP: ${{ secrets.LLAVA_MODAL_APP }}
+          LLAVA_MODAL_FUNCTION: ${{ secrets.LLAVA_MODAL_FUNCTION }}
       
       - name: Cleanup
         if: always()
         run: |
           cd src/cad_coder_backend
           docker compose -f docker-compose.test.yml down -v
+          # Clean up .env.test if created
+          rm -f src/.env.test || true
 
   # ============================================================================
   # COVERAGE SUMMARY

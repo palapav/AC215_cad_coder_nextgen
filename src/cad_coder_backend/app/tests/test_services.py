@@ -173,6 +173,13 @@ class TestModalClient:
         assert isinstance(result, bytes)
         assert fmt == "PNG"
 
+    def test_serialize_image_base64_invalid(self):
+        """Test serializing invalid base64 data URL raises error."""
+        from app.services.modal_client import _serialize_image
+        
+        with pytest.raises(ValueError):
+            _serialize_image("data:image/png;base64,invalid_base64_data!!!")
+
     def test_serialize_image_file_path(self, tmp_path):
         """Test serializing image from file path."""
         from PIL import Image
@@ -184,6 +191,21 @@ class TestModalClient:
         img.save(img_path)
         
         result, fmt = _serialize_image(str(img_path))
+        
+        assert result is not None
+        assert isinstance(result, bytes)
+        assert fmt == "PNG"
+
+    def test_serialize_image_file_path_pathlib(self, tmp_path):
+        """Test serializing image from Path object."""
+        from PIL import Image
+        from app.services.modal_client import _serialize_image
+        
+        img_path = tmp_path / "test.png"
+        img = Image.new('RGB', (50, 50), color='green')
+        img.save(img_path)
+        
+        result, fmt = _serialize_image(img_path)
         
         assert result is not None
         assert isinstance(result, bytes)
@@ -225,6 +247,50 @@ class TestModalClient:
         assert isinstance(result, Image.Image)
         assert result.mode == "RGB"
 
+    def test_load_pil_image_base64(self):
+        """Test loading PIL image from base64 data URL."""
+        from PIL import Image
+        from app.services.modal_client import _load_pil_image
+        
+        img = Image.new('RGB', (50, 50), color='blue')
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        b64_data = base64.b64encode(buffer.getvalue()).decode()
+        data_url = f"data:image/png;base64,{b64_data}"
+        
+        result = _load_pil_image(data_url)
+        
+        assert isinstance(result, Image.Image)
+        assert result.mode == "RGB"
+
+    def test_load_pil_image_file_path(self, tmp_path):
+        """Test loading PIL image from file path."""
+        from PIL import Image
+        from app.services.modal_client import _load_pil_image
+        
+        img_path = tmp_path / "test.png"
+        img = Image.new('RGB', (50, 50), color='green')
+        img.save(img_path)
+        
+        result = _load_pil_image(str(img_path))
+        
+        assert isinstance(result, Image.Image)
+        assert result.mode == "RGB"
+
+    def test_load_pil_image_invalid_base64(self):
+        """Test loading invalid base64 raises error."""
+        from app.services.modal_client import _load_pil_image
+        
+        with pytest.raises(ValueError):
+            _load_pil_image("data:image/png;base64,invalid!!!")
+
+    def test_load_pil_image_file_not_found(self):
+        """Test loading non-existent file raises error."""
+        from app.services.modal_client import _load_pil_image
+        
+        with pytest.raises(FileNotFoundError):
+            _load_pil_image("/nonexistent/path/image.png")
+
     def test_preprocess_image_for_llava(self):
         """Test LLaVA image preprocessing."""
         from PIL import Image
@@ -244,6 +310,30 @@ class TestModalClient:
         
         # Non-square image
         img = Image.new('RGB', (200, 100), color='blue')
+        result, fmt = _preprocess_image_for_llava(img, target_size=336)
+        
+        assert result is not None
+        assert isinstance(result, bytes)
+
+    def test_preprocess_image_for_llava_wide_image(self):
+        """Test LLaVA preprocessing pads wide images."""
+        from PIL import Image
+        from app.services.modal_client import _preprocess_image_for_llava
+        
+        # Wide image (width > height)
+        img = Image.new('RGB', (300, 150), color='yellow')
+        result, fmt = _preprocess_image_for_llava(img, target_size=336)
+        
+        assert result is not None
+        assert isinstance(result, bytes)
+
+    def test_preprocess_image_for_llava_tall_image(self):
+        """Test LLaVA preprocessing pads tall images."""
+        from PIL import Image
+        from app.services.modal_client import _preprocess_image_for_llava
+        
+        # Tall image (height > width)
+        img = Image.new('RGB', (150, 300), color='purple')
         result, fmt = _preprocess_image_for_llava(img, target_size=336)
         
         assert result is not None
@@ -278,6 +368,104 @@ class TestModalClient:
         
         # Should not raise
         _ensure_modal_credentials()
+
+    def test_ensure_modal_credentials_partial(self, monkeypatch):
+        """Test credential check raises error when only one token present."""
+        from app.services.modal_client import _ensure_modal_credentials, ModalConfigError
+        
+        monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
+        monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
+        
+        with pytest.raises(ModalConfigError):
+            _ensure_modal_credentials()
+
+    @pytest.mark.asyncio
+    async def test_run_modal_qwen_inference_mocked(self, monkeypatch):
+        """Test Qwen Modal inference with mocked function."""
+        from app.services.modal_client import run_modal_qwen_inference
+        
+        mock_fn_handle = MagicMock()
+        mock_fn_handle.remote.return_value = "import cadquery as cq\nresult = cq.Workplane('XY').sphere(0.5)"
+        
+        monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
+        monkeypatch.setenv("MODAL_TOKEN_SECRET", "test_secret")
+        monkeypatch.setenv("QWEN_MODAL_APP", "test-app")
+        monkeypatch.setenv("QWEN_MODAL_FUNCTION", "test-fn")
+        
+        with patch('app.services.modal_client._lookup_qwen_modal_function', return_value=mock_fn_handle):
+            result = await run_modal_qwen_inference(
+                prompt="make a sphere",
+                image=None,
+                max_new_tokens=128,
+                temperature=0.0
+            )
+            
+            assert isinstance(result, str)
+            assert "cadquery" in result.lower()
+
+    @pytest.mark.asyncio
+    async def test_run_modal_llava_inference_mocked(self, monkeypatch):
+        """Test LLaVA Modal inference with mocked function."""
+        from PIL import Image
+        from app.services.modal_client import run_modal_llava_inference
+        
+        mock_fn_handle = MagicMock()
+        mock_fn_handle.remote.return_value = "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)"
+        
+        monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
+        monkeypatch.setenv("MODAL_TOKEN_SECRET", "test_secret")
+        monkeypatch.setenv("LLAVA_MODAL_APP", "test-app")
+        monkeypatch.setenv("LLAVA_MODAL_FUNCTION", "test-fn")
+        
+        test_image = Image.new('RGB', (100, 100), color='red')
+        
+        with patch('app.services.modal_client._lookup_llava_modal_function', return_value=mock_fn_handle):
+            result = await run_modal_llava_inference(
+                prompt="make a cube",
+                image=test_image,
+                max_new_tokens=128,
+                temperature=0.0,
+                top_p=1.0
+            )
+            
+            assert isinstance(result, str)
+            assert "cadquery" in result.lower()
+
+    def test_lookup_qwen_modal_function_missing_config(self, monkeypatch):
+        """Test Qwen Modal lookup raises error when config missing."""
+        from app.services.modal_client import _lookup_qwen_modal_function, ModalConfigError
+        
+        monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
+        monkeypatch.setenv("MODAL_TOKEN_SECRET", "test_secret")
+        monkeypatch.delenv("QWEN_MODAL_APP", raising=False)
+        monkeypatch.delenv("QWEN_MODAL_FUNCTION", raising=False)
+        
+        # Clear cache if it exists
+        try:
+            _lookup_qwen_modal_function.cache_clear()
+        except AttributeError:
+            pass  # Cache may not exist yet
+        
+        with pytest.raises(ModalConfigError):
+            _lookup_qwen_modal_function()
+
+    def test_lookup_llava_modal_function_missing_config(self, monkeypatch):
+        """Test LLaVA Modal lookup raises error when config missing."""
+        from app.services.modal_client import _lookup_llava_modal_function, ModalConfigError
+        
+        monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
+        monkeypatch.setenv("MODAL_TOKEN_SECRET", "test_secret")
+        monkeypatch.delenv("LLAVA_MODAL_APP", raising=False)
+        monkeypatch.delenv("LLAVA_MODAL_FUNCTION", raising=False)
+        
+        # Clear cache if it exists
+        try:
+            _lookup_llava_modal_function.cache_clear()
+        except AttributeError:
+            pass  # Cache may not exist yet
+        
+        with pytest.raises(ModalConfigError):
+            _lookup_llava_modal_function()
 
 
 # ============================================================================
@@ -377,6 +565,116 @@ class TestRAGService:
             assert isinstance(result, list)
             assert len(result) > 0
             assert "text" in result[0]
+
+    def test_retrieve_similar_context_with_prompts(self, monkeypatch):
+        """Test retrieve_similar_context with database prompts."""
+        monkeypatch.setenv("ENABLE_RAG", "false")
+        
+        import importlib
+        from app.services import rag_service
+        importlib.reload(rag_service)
+        
+        mock_prompts = [
+            {"prompt": "make a cube"},
+            {"prompt": "create a sphere"},
+            {"prompt": "build a cylinder"}
+        ]
+        
+        with patch.object(rag_service, 'get_all_prompts', return_value=mock_prompts):
+            result = rag_service.retrieve_similar_context("test", top_k=2)
+            
+            assert isinstance(result, list)
+            assert len(result) <= 2
+            assert "text" in result[0]
+
+    def test_retrieve_context_with_image(self, monkeypatch):
+        """Test retrieve_context with PIL image."""
+        from PIL import Image
+        monkeypatch.setenv("ENABLE_RAG", "false")
+        
+        import importlib
+        from app.services import rag_service
+        importlib.reload(rag_service)
+        
+        img = Image.new('RGB', (100, 100), color='red')
+        result = rag_service.retrieve_context(prompt="test query", image=img)
+        
+        assert isinstance(result, dict)
+        assert result["used"] is False
+        assert result["context"] == ""
+        assert result["results"] == []
+
+    def test_retrieve_context_with_image_reference(self, monkeypatch):
+        """Test retrieve_context with image reference."""
+        monkeypatch.setenv("ENABLE_RAG", "false")
+        
+        import importlib
+        from app.services import rag_service
+        importlib.reload(rag_service)
+        
+        result = rag_service.retrieve_context(
+            prompt="test query",
+            image_reference="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        )
+        
+        assert isinstance(result, dict)
+        assert result["used"] is False
+
+    def test_retrieve_context_with_file_path(self, tmp_path, monkeypatch):
+        """Test retrieve_context with file path."""
+        from PIL import Image
+        monkeypatch.setenv("ENABLE_RAG", "false")
+        
+        import importlib
+        from app.services import rag_service
+        importlib.reload(rag_service)
+        
+        img_path = tmp_path / "test.png"
+        img = Image.new('RGB', (50, 50), color='green')
+        img.save(img_path)
+        
+        result = rag_service.retrieve_context(
+            prompt="test query",
+            image_reference=str(img_path)
+        )
+        
+        assert isinstance(result, dict)
+        assert result["used"] is False
+
+    def test_write_temp_image_from_pil(self):
+        """Test _write_temp_image_from_pil creates temp file."""
+        from PIL import Image
+        from app.services.rag_service import _write_temp_image_from_pil
+        
+        img = Image.new('RGB', (100, 100), color='red')
+        temp_path, cleanup = _write_temp_image_from_pil(img)
+        
+        assert os.path.exists(temp_path)
+        assert cleanup is not None
+        
+        # Cleanup
+        cleanup()
+        assert not os.path.exists(temp_path)
+
+    def test_write_temp_image_from_base64(self):
+        """Test _write_temp_image_from_base64 creates temp file."""
+        from PIL import Image
+        from app.services.rag_service import _write_temp_image_from_base64
+        
+        img = Image.new('RGB', (50, 50), color='blue')
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        b64_data = base64.b64encode(buffer.getvalue()).decode()
+        data_url = f"data:image/png;base64,{b64_data}"
+        
+        temp_path, cleanup = _write_temp_image_from_base64(data_url)
+        
+        assert os.path.exists(temp_path)
+        assert cleanup is not None
+        
+        # Cleanup
+        cleanup()
+        assert not os.path.exists(temp_path)
 
     def test_ensure_google_credentials_uses_fallback(self, tmp_path, monkeypatch):
         """Test _ensure_google_credentials uses RAG key fallback."""
@@ -514,6 +812,47 @@ class TestAuthService:
         assert isinstance(result, dict)
         assert "error" in result
 
+    def test_verify_google_token_success(self, monkeypatch):
+        """Test verifying valid Google token."""
+        from app.services.auth_service import verify_google_token
+        
+        mock_idinfo = {
+            "email": "test@example.com",
+            "name": "Test User",
+            "sub": "123456789"
+        }
+        
+        with patch('app.services.auth_service.id_token.verify_oauth2_token', return_value=mock_idinfo):
+            result = verify_google_token("valid_token")
+            
+            assert isinstance(result, dict)
+            assert result["email"] == "test@example.com"
+            assert result["name"] == "Test User"
+            assert result["sub"] == "123456789"
+            assert "error" not in result
+
+    def test_verify_google_token_value_error(self, monkeypatch):
+        """Test verifying token raises ValueError."""
+        from app.services.auth_service import verify_google_token
+        
+        with patch('app.services.auth_service.id_token.verify_oauth2_token', side_effect=ValueError("Invalid token")):
+            result = verify_google_token("invalid_token")
+            
+            assert isinstance(result, dict)
+            assert "error" in result
+            assert "Invalid Google ID token" in result["error"]
+
+    def test_verify_google_token_generic_exception(self, monkeypatch):
+        """Test verifying token raises generic exception."""
+        from app.services.auth_service import verify_google_token
+        
+        with patch('app.services.auth_service.id_token.verify_oauth2_token', side_effect=Exception("Network error")):
+            result = verify_google_token("token")
+            
+            assert isinstance(result, dict)
+            assert "error" in result
+            assert "Network error" in result["error"]
+
 
 # ============================================================================
 # Utils Tests
@@ -537,6 +876,16 @@ class TestUtils:
         # Should not raise
         ensure_env_vars("TEST_VAR")
 
+    def test_ensure_env_vars_multiple_present(self, monkeypatch):
+        """Test ensure_env_vars with multiple vars present."""
+        from app.services.utils import ensure_env_vars
+        
+        monkeypatch.setenv("VAR1", "value1")
+        monkeypatch.setenv("VAR2", "value2")
+        
+        # Should not raise
+        ensure_env_vars("VAR1", "VAR2")
+
     def test_ensure_env_vars_missing(self, monkeypatch):
         """Test ensure_env_vars raises when vars missing."""
         from app.services.utils import ensure_env_vars
@@ -545,6 +894,31 @@ class TestUtils:
         
         with pytest.raises(EnvironmentError):
             ensure_env_vars("MISSING_VAR")
+
+    def test_ensure_env_vars_multiple_missing(self, monkeypatch):
+        """Test ensure_env_vars raises when multiple vars missing."""
+        from app.services.utils import ensure_env_vars
+        
+        monkeypatch.delenv("MISSING_VAR1", raising=False)
+        monkeypatch.delenv("MISSING_VAR2", raising=False)
+        
+        with pytest.raises(EnvironmentError) as exc_info:
+            ensure_env_vars("MISSING_VAR1", "MISSING_VAR2")
+        
+        assert "MISSING_VAR1" in str(exc_info.value)
+        assert "MISSING_VAR2" in str(exc_info.value)
+
+    def test_ensure_env_vars_partial_missing(self, monkeypatch):
+        """Test ensure_env_vars raises when some vars missing."""
+        from app.services.utils import ensure_env_vars
+        
+        monkeypatch.setenv("PRESENT_VAR", "value")
+        monkeypatch.delenv("MISSING_VAR", raising=False)
+        
+        with pytest.raises(EnvironmentError) as exc_info:
+            ensure_env_vars("PRESENT_VAR", "MISSING_VAR")
+        
+        assert "MISSING_VAR" in str(exc_info.value)
 
     def test_init_environment(self):
         """Test init_environment runs without error."""
@@ -604,6 +978,17 @@ class TestGCSService:
         result = gcs_service.upload_cad_code("test prompt", "print('hi')")
         assert result.startswith("local://test_prompt")
 
+    def test_upload_cad_code_without_credentials_none_path(self, monkeypatch):
+        """Should fall back to local path when creds path is None."""
+        from app.services import gcs_service
+
+        monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+        monkeypatch.setattr(gcs_service.os, "getenv", lambda key, default: "" if key == "GOOGLE_APPLICATION_CREDENTIALS" else default)
+        monkeypatch.setattr(gcs_service.os.path, "exists", lambda _: False)
+
+        result = gcs_service.upload_cad_code("test prompt", "print('hi')")
+        assert result.startswith("local://test_prompt")
+
     def test_upload_cad_code_with_credentials(self, tmp_path, monkeypatch):
         """Should attempt upload when credentials exist."""
         from app.services import gcs_service
@@ -630,6 +1015,50 @@ class TestGCSService:
         mock_bucket.blob.assert_called_once()
         mock_blob.upload_from_filename.assert_called_once()
 
+    def test_upload_cad_code_upload_exception(self, tmp_path, monkeypatch):
+        """Should fall back to local path when upload fails."""
+        from app.services import gcs_service
+
+        cred_path = tmp_path / "creds.json"
+        cred_path.write_text("{}")
+
+        monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(cred_path))
+        monkeypatch.setattr(gcs_service, "BUCKET_NAME", "unit-test-bucket")
+        monkeypatch.setattr(gcs_service.os.path, "exists", lambda path: Path(path).exists())
+
+        mock_blob = MagicMock()
+        mock_blob.upload_from_filename.side_effect = Exception("Upload failed")
+        mock_bucket = MagicMock()
+        mock_bucket.blob.return_value = mock_blob
+        mock_client = MagicMock()
+        mock_client.bucket.return_value = mock_bucket
+        mock_storage = MagicMock()
+        mock_storage.Client.return_value = mock_client
+        monkeypatch.setattr(gcs_service, "storage", mock_storage)
+
+        result = gcs_service.upload_cad_code("test prompt", "import cadquery as cq")
+
+        assert result.startswith("local://test_prompt")
+
+    def test_upload_cad_code_client_exception(self, tmp_path, monkeypatch):
+        """Should fall back to local path when client creation fails."""
+        from app.services import gcs_service
+
+        cred_path = tmp_path / "creds.json"
+        cred_path.write_text("{}")
+
+        monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(cred_path))
+        monkeypatch.setattr(gcs_service, "BUCKET_NAME", "unit-test-bucket")
+        monkeypatch.setattr(gcs_service.os.path, "exists", lambda path: Path(path).exists())
+
+        mock_storage = MagicMock()
+        mock_storage.Client.side_effect = Exception("Client creation failed")
+        monkeypatch.setattr(gcs_service, "storage", mock_storage)
+
+        result = gcs_service.upload_cad_code("test prompt", "import cadquery as cq")
+
+        assert result.startswith("local://test_prompt")
+
 
 # ============================================================================
 # Logger Service Tests
@@ -654,3 +1083,73 @@ class TestLoggerService:
 
         second_instance = logger_module.get_logger("test_logger")
         assert len(logger_instance.handlers) == len(second_instance.handlers)
+
+    def test_get_logger_default_name(self, tmp_path, monkeypatch):
+        """Test logger with default name."""
+        monkeypatch.setenv("LOG_PATH", str(tmp_path / "test.log"))
+        from app.services import logger as logger_module
+
+        importlib.reload(logger_module)
+
+        logger_instance = logger_module.get_logger()
+        logger_instance.info("test message")
+
+        log_file = tmp_path / "test.log"
+        assert log_file.exists()
+        contents = log_file.read_text()
+        assert "test message" in contents
+
+    def test_get_logger_multiple_loggers(self, tmp_path, monkeypatch):
+        """Test multiple logger instances."""
+        monkeypatch.setenv("LOG_PATH", str(tmp_path / "test.log"))
+        from app.services import logger as logger_module
+
+        importlib.reload(logger_module)
+
+        logger1 = logger_module.get_logger("logger1")
+        logger2 = logger_module.get_logger("logger2")
+        
+        logger1.info("message1")
+        logger2.info("message2")
+
+        log_file = tmp_path / "test.log"
+        assert log_file.exists()
+        contents = log_file.read_text()
+        assert "message1" in contents
+        assert "message2" in contents
+
+    def test_get_logger_different_levels(self, tmp_path, monkeypatch):
+        """Test logger with different log levels."""
+        monkeypatch.setenv("LOG_PATH", str(tmp_path / "test.log"))
+        from app.services import logger as logger_module
+
+        importlib.reload(logger_module)
+
+        logger_instance = logger_module.get_logger("test_logger")
+        logger_instance.debug("debug message")
+        logger_instance.info("info message")
+        logger_instance.warning("warning message")
+        logger_instance.error("error message")
+
+        log_file = tmp_path / "test.log"
+        assert log_file.exists()
+        contents = log_file.read_text()
+        assert "info message" in contents
+        assert "warning message" in contents
+        assert "error message" in contents
+
+    def test_get_logger_no_duplicate_handlers(self, tmp_path, monkeypatch):
+        """Test that calling get_logger multiple times doesn't add duplicate handlers."""
+        monkeypatch.setenv("LOG_PATH", str(tmp_path / "test.log"))
+        from app.services import logger as logger_module
+
+        importlib.reload(logger_module)
+
+        logger1 = logger_module.get_logger("test_logger")
+        handler_count_1 = len(logger1.handlers)
+        
+        logger2 = logger_module.get_logger("test_logger")
+        handler_count_2 = len(logger2.handlers)
+        
+        assert handler_count_1 == handler_count_2
+        assert logger1 is logger2  # Should return same logger instance

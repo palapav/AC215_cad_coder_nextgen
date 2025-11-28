@@ -128,6 +128,114 @@ class TestGenerateRouter:
             
             assert response.status_code == 200
 
+    def test_generate_cad_empty_prompt_with_image(self):
+        """Test generate endpoint with empty prompt but image provided."""
+        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = {
+                "cad_code": "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)",
+                "rag_used": False,
+                "rag_context": None,
+                "rag_results": []
+            }
+            
+            response = client.post("/generate_cad", json={
+                "prompt": "",
+                "model_choice": "llava",
+                "image_path": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+            })
+            
+            assert response.status_code == 200
+            # Should use default prompt for image
+            call_kwargs = mock_gen.await_args.kwargs
+            assert "Generate the CADQuery code" in call_kwargs["prompt"]
+
+    def test_generate_cad_empty_prompt_no_image(self):
+        """Test generate endpoint with empty prompt and no image."""
+        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = {
+                "cad_code": "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)",
+                "rag_used": False,
+                "rag_context": None,
+                "rag_results": []
+            }
+            
+            response = client.post("/generate_cad", json={
+                "prompt": "",
+                "model_choice": "llava"
+            })
+            
+            assert response.status_code == 200
+            # Should use default prompt
+            call_kwargs = mock_gen.await_args.kwargs
+            assert "simple geometric shape" in call_kwargs["prompt"]
+
+    def test_generate_cad_invalid_base64_image(self):
+        """Test generate endpoint with invalid base64 image."""
+        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock):
+            response = client.post("/generate_cad", json={
+                "prompt": "test",
+                "model_choice": "llava",
+                "image_path": "data:image/png;base64,invalid_base64_data!!!"
+            })
+            
+            assert response.status_code == 500
+            assert "Invalid base64 image data" in response.json()["detail"]
+
+    def test_generate_cad_empty_cad_code(self):
+        """Test generate endpoint when model returns empty CAD code."""
+        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = {
+                "cad_code": "",
+                "rag_used": False,
+                "rag_context": None,
+                "rag_results": []
+            }
+            
+            response = client.post("/generate_cad", json={
+                "prompt": "make a cube",
+                "model_choice": "llava"
+            })
+            
+            assert response.status_code == 500
+            assert "empty or None" in response.json()["detail"]
+
+    def test_generate_cad_with_file_path_image(self, tmp_path):
+        """Test generate endpoint with file path image."""
+        from PIL import Image
+        
+        img_path = tmp_path / "test.png"
+        img = Image.new('RGB', (50, 50), color='green')
+        img.save(img_path)
+        
+        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = {
+                "cad_code": "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)",
+                "rag_used": False,
+                "rag_context": None,
+                "rag_results": []
+            }
+            
+            response = client.post("/generate_cad", json={
+                "prompt": "test",
+                "model_choice": "llava",
+                "image_path": str(img_path)
+            })
+            
+            assert response.status_code == 200
+
+    def test_generate_cad_model_service_exception(self):
+        """Test generate endpoint handles model service exceptions."""
+        with patch('app.services.model_service.generate_cad_code', new_callable=AsyncMock) as mock_gen:
+            mock_gen.side_effect = Exception("Model service error")
+            
+            response = client.post("/generate_cad", json={
+                "prompt": "make a cube",
+                "model_choice": "llava"
+            })
+            
+            assert response.status_code == 500
+            assert "CAD generation failed" in response.json()["detail"]
+
 
 # ============================================================================
 # History Router Tests
@@ -257,8 +365,42 @@ class TestAuthRouter:
         if response.status_code == 200:
             data = response.json()
             assert "user" in data
+            assert data["auth_method"] == "google"
+            assert data["status"] == "success"
         else:
             assert response.status_code == 404
+
+    def test_auth_google_missing_token(self, monkeypatch):
+        """Test Google auth with missing token."""
+        from app.services import auth_service
+        
+        def mock_verify(token):
+            return {"email": "test@example.com", "name": "Test User", "sub": "123"}
+        
+        monkeypatch.setattr(auth_service, "verify_google_token", mock_verify)
+        
+        response = client.post("/auth/google", json={})
+        
+        # May return 404 if auth router is disabled - that's acceptable
+        if response.status_code != 404:
+            assert response.status_code == 400
+            assert "Missing Google credential token" in response.json()["detail"]
+
+    def test_auth_google_invalid_token(self, monkeypatch):
+        """Test Google auth with invalid token."""
+        from app.services import auth_service
+        
+        def mock_verify(token):
+            return {"error": "Invalid Google ID token"}
+        
+        monkeypatch.setattr(auth_service, "verify_google_token", mock_verify)
+        
+        response = client.post("/auth/google", json={"credential": "invalid_token"})
+        
+        # May return 404 if auth router is disabled - that's acceptable
+        if response.status_code != 404:
+            assert response.status_code == 401
+            assert "Invalid Google ID token" in response.json()["detail"]
 
 
 # ============================================================================

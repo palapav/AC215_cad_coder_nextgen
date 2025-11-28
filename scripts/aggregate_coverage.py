@@ -151,18 +151,32 @@ def main() -> None:
         sys.exit(1)
 
     combined_ratio = total_covered / total_lines
-    print(f"\nCombined coverage: {combined_ratio*100:.2f}% ({total_covered}/{total_lines} lines)")
-    print(f"Reports processed: {reports_found}")
+    combined_pct = combined_ratio * 100
+    threshold_pct = args.threshold * 100
+
+    print("\n==============================================")
+    print("             FINAL COVERAGE REPORT            ")
+    print("==============================================")
+    print(f"Reports processed : {reports_found}")
+    print(f"Total lines       : {total_lines}")
+    print(f"Lines covered     : {total_covered}")
+    print(f"Combined coverage : {combined_pct:.2f}%")
+    print(f"Required minimum  : {threshold_pct:.0f}%")
 
     if combined_ratio < args.threshold:
+        print("----------------------------------------------")
         print(
-            f"\nERROR: Combined coverage {combined_ratio*100:.2f}% "
-            f"is below required threshold of {args.threshold*100:.0f}%.",
+            f"RESULT: ❌ FAIL – coverage {combined_pct:.2f}% "
+            f"is below required {threshold_pct:.0f}%.",
             file=sys.stderr,
         )
+        print("==============================================")
         sys.exit(1)
     else:
-        print(f"\n✅ Coverage threshold of {args.threshold*100:.0f}% met!")
+        print("----------------------------------------------")
+        print(f"RESULT: ✅ PASS – coverage threshold met.")
+        print("==============================================")
+
 
 
 if __name__ == "__main__":

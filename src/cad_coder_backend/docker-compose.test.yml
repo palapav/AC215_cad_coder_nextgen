@@ -78,8 +78,8 @@ services:
       context: .
       dockerfile: Dockerfile.test
     container_name: cadcoder-backend-e2e
-    env_file:
-      - ../.env.test  # Optional: test-specific env file
+    # Note: env_file is optional - if ../.env.test doesn't exist, it will be skipped
+    # For CI/CD, credentials are passed via environment variables instead
     environment:
       - PYTHONPATH=/app
       - MONGO_URI=mongodb://mongo-test:27017
@@ -89,8 +89,11 @@ services:
       - LLAVA_MODAL_MAX_NEW_TOKENS=128
       - QWEN_MODAL_TEMPERATURE=0.0
       - LLAVA_MODAL_TEMPERATURE=0.0
-      # RAG disabled for E2E by default (enable via .env.test if needed)
+      # RAG disabled for E2E by default (enable via environment variables if needed)
       - ENABLE_RAG=${ENABLE_RAG:-false}
+      # Mock backends by default for CI/CD (override with real credentials for local E2E)
+      - QWEN_INFERENCE_BACKEND=${QWEN_INFERENCE_BACKEND:-mock}
+      - LLAVA_INFERENCE_BACKEND=${LLAVA_INFERENCE_BACKEND:-mock}
     depends_on:
       mongo-test:
         condition: service_healthy
