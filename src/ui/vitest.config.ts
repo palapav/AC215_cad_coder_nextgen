@@ -10,8 +10,9 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'json-summary', 'lcov'],
+      reporter: ['text', 'text-summary', 'json', 'json-summary', 'lcov', 'cobertura'],
       reportsDirectory: './coverage',
+      reportOnFailure: true,
       include: ['src/**/*.{ts,tsx}'],
       exclude: [
         'src/**/*.test.{ts,tsx}',
@@ -24,13 +25,13 @@ export default defineConfig({
         // Exclude figma components
         'src/components/figma/**',
       ],
-      // Lower thresholds for UI - component testing with radix-ui is complex
+      // Target 50% coverage as requested
       thresholds: {
         global: {
-          statements: 10,
-          branches: 10,
-          functions: 10,
-          lines: 10,
+          statements: 50,
+          branches: 50,
+          functions: 50,
+          lines: 50,
         },
       },
     },

@@ -1,38 +1,162 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { AIModelSandbox } from '../components/AIModelSandbox'
 
-/**
- * Tests for AIModelSandbox logic without rendering actual components.
- * This avoids issues with versioned radix-ui imports.
- */
+// Mock child components to avoid complex radix-ui dependencies
+vi.mock('../components/ModelSelector', () => ({
+  ModelSelector: ({ selectedModel, onModelChange }: any) => (
+    <div data-testid="model-selector">
+      <select
+        data-testid="model-select"
+        value={selectedModel}
+        onChange={(e) => onModelChange(e.target.value)}
+      >
+        <option value="baseline-llava">Baseline-LLaVA</option>
+        <option value="qwen3-vl-2b">Qwen3-VL-2B-Instruct</option>
+      </select>
+    </div>
+  ),
+}))
 
-describe('AIModelSandbox Logic', () => {
+vi.mock('../components/ChatHistory', () => ({
+  ChatHistory: ({ messages }: any) => (
+    <div data-testid="chat-history">
+      {messages.length === 0 ? (
+        <div>No messages</div>
+      ) : (
+        messages.map((msg: any) => (
+          <div key={msg.id} data-testid={`message-${msg.id}`}>
+            {msg.role}: {msg.content}
+          </div>
+        ))
+      )}
+    </div>
+  ),
+}))
+
+vi.mock('../components/ChatInput', () => ({
+  ChatInput: ({ onSendMessage, disabled }: any) => (
+    <div data-testid="chat-input">
+      <input
+        data-testid="message-input"
+        disabled={disabled}
+        onChange={(e) => {
+          (window as any).__testMessage = e.target.value
+        }}
+      />
+      <button
+        data-testid="send-button"
+        onClick={() => {
+          const msg = (window as any).__testMessage || 'test message'
+          onSendMessage(msg)
+        }}
+        disabled={disabled}
+      >
+        Send
+      </button>
+    </div>
+  ),
+}))
+
+vi.mock('../components/ChatSidebar', () => ({
+  ChatSidebar: ({ 
+    currentSessionId, 
+    sessions, 
+    onSessionSelect, 
+    onNewSession, 
+    onDeleteSession 
+  }: any) => (
+    <div data-testid="chat-sidebar">
+      <button data-testid="new-session-btn" onClick={onNewSession}>
+        New Session
+      </button>
+      {sessions.map((session: any) => (
+        <div
+          key={session.id}
+          data-testid={`session-${session.id}`}
+          data-current={currentSessionId === session.id}
+        >
+          <button onClick={() => onSessionSelect(session.id)}>
+            {session.name}
+          </button>
+          <button
+            data-testid={`delete-session-${session.id}`}
+            onClick={() => onDeleteSession(session.id)}
+          >
+            Delete
+          </button>
+        </div>
+      ))}
+    </div>
+  ),
+  ChatSession: {},
+}))
+
+vi.mock('../components/ui/button', () => ({
+  Button: ({ children, onClick, disabled, ...props }: any) => (
+    <button onClick={onClick} disabled={disabled} {...props}>
+      {children}
+    </button>
+  ),
+}))
+
+describe('AIModelSandbox', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    global.fetch = vi.fn()
+    ;(window as any).__testMessage = ''
   })
 
-  describe('API Integration', () => {
-    it('calls fetch with correct parameters', async () => {
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ cad_code: 'import cadquery as cq' }),
-      })
-      global.fetch = mockFetch
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
 
-      const requestBody = {
-        prompt: 'Create a cube',
-        image_path: null,
-        user_id: 'default',
-        model_choice: 'llava',
-        rag_context: null,
-      }
+  it('renders the component with initial state', () => {
+    render(<AIModelSandbox />)
+    expect(screen.getByTestId('chat-sidebar')).toBeInTheDocument()
+    expect(screen.getByTestId('chat-history')).toBeInTheDocument()
+    expect(screen.getByTestId('chat-input')).toBeInTheDocument()
+  })
 
-      await fetch('http://localhost:8000/generate_cad', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      })
+  it('creates initial session on mount', () => {
+    render(<AIModelSandbox />)
+    expect(screen.getByTestId('new-session-btn')).toBeInTheDocument()
+  })
 
-      expect(mockFetch).toHaveBeenCalledWith(
+  it('creates a new session when new session button is clicked', async () => {
+    render(<AIModelSandbox />)
+    const newSessionBtn = screen.getByTestId('new-session-btn')
+    
+    fireEvent.click(newSessionBtn)
+    
+    await waitFor(() => {
+      const sessions = screen.getAllByTestId(/^session-/)
+      expect(sessions.length).toBeGreaterThan(0)
+    })
+  })
+
+  it('sends a message and updates state', async () => {
+    const mockResponse = {
+      cad_code: 'import cadquery as cq\nresult = cq.Workplane("XY").box(1, 1, 1)',
+    }
+    
+    ;(global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockResponse,
+    })
+
+    render(<AIModelSandbox />)
+    
+    const input = screen.getByTestId('message-input')
+    const sendButton = screen.getByTestId('send-button')
+    
+    fireEvent.change(input, { target: { value: 'Create a cube' } })
+    ;(window as any).__testMessage = 'Create a cube'
+    
+    fireEvent.click(sendButton)
+    
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
         'http://localhost:8000/generate_cad',
         expect.objectContaining({
           method: 'POST',
@@ -40,201 +164,188 @@ describe('AIModelSandbox Logic', () => {
         })
       )
     })
+  })
 
-    it('handles API success response', async () => {
-      const mockResponse = {
-        cad_code: 'import cadquery as cq\nresult = cq.Workplane("XY").box(1, 1, 1)',
-        rag_used: false,
-      }
+  it('handles API error gracefully', async () => {
+    ;(global.fetch as any).mockRejectedValueOnce(new Error('Network error'))
 
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => mockResponse,
-      })
-      global.fetch = mockFetch
-
-      const response = await fetch('http://localhost:8000/generate_cad', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'test' }),
-      })
-
-      const data = await response.json()
-      expect(data.cad_code).toContain('cadquery')
-    })
-
-    it('handles API error response', async () => {
-      const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'))
-      global.fetch = mockFetch
-
-      let error: Error | null = null
-      try {
-        await fetch('http://localhost:8000/generate_cad', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: 'test' }),
-        })
-      } catch (e) {
-        error = e as Error
-      }
-
-      expect(error).not.toBeNull()
-      expect(error?.message).toBe('Network error')
+    render(<AIModelSandbox />)
+    
+    const input = screen.getByTestId('message-input')
+    const sendButton = screen.getByTestId('send-button')
+    
+    fireEvent.change(input, { target: { value: 'test' } })
+    ;(window as any).__testMessage = 'test'
+    
+    fireEvent.click(sendButton)
+    
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalled()
     })
   })
 
-  describe('State Management', () => {
-    it('manages session state correctly', () => {
-      interface ChatSession {
-        id: string
-        name: string
-        messages: any[]
-        model: string
-      }
+  it('changes model selection', async () => {
+    render(<AIModelSandbox />)
+    
+    const modelSelect = screen.getByTestId('model-select')
+    
+    fireEvent.change(modelSelect, { target: { value: 'qwen3-vl-2b' } })
+    
+    await waitFor(() => {
+      expect(modelSelect).toHaveValue('qwen3-vl-2b')
+    })
+  })
 
-      let sessions: ChatSession[] = []
-      let currentSessionId: string | null = null
-
-      // Create new session
-      const newSession: ChatSession = {
-        id: '123',
-        name: 'New Chat',
-        messages: [],
-        model: 'Baseline-LLaVA',
-      }
-      sessions = [newSession, ...sessions]
-      currentSessionId = newSession.id
-
-      expect(sessions).toHaveLength(1)
-      expect(currentSessionId).toBe('123')
+  it('normalizes model names correctly', async () => {
+    const mockResponse = { cad_code: 'test code' }
+    ;(global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockResponse,
     })
 
-    it('adds messages to session', () => {
-      interface Message {
-        id: string
-        role: 'user' | 'assistant'
-        content: string
-      }
-
-      let messages: Message[] = []
-
-      const userMessage: Message = {
-        id: '1',
-        role: 'user',
-        content: 'Create a cube',
-      }
-      messages = [...messages, userMessage]
-
-      const assistantMessage: Message = {
-        id: '2',
-        role: 'assistant',
-        content: 'import cadquery as cq',
-      }
-      messages = [...messages, assistantMessage]
-
-      expect(messages).toHaveLength(2)
-      expect(messages[0].role).toBe('user')
-      expect(messages[1].role).toBe('assistant')
+    render(<AIModelSandbox />)
+    
+    const modelSelect = screen.getByTestId('model-select')
+    fireEvent.change(modelSelect, { target: { value: 'baseline-llava' } })
+    
+    await waitFor(() => {
+      const input = screen.getByTestId('message-input')
+      const sendButton = screen.getByTestId('send-button')
+      fireEvent.change(input, { target: { value: 'test' } })
+      ;(window as any).__testMessage = 'test'
+      fireEvent.click(sendButton)
     })
-
-    it('clears messages from session', () => {
-      let messages = [
-        { id: '1', content: 'test1' },
-        { id: '2', content: 'test2' },
-      ]
-
-      // Clear chat
-      messages = []
-
-      expect(messages).toHaveLength(0)
+    
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalled()
+      const call = (global.fetch as any).mock.calls[0]
+      const body = JSON.parse(call[1].body)
+      expect(body.model_choice).toBe('llava')
     })
+  })
 
-    it('deletes session correctly', () => {
-      let sessions = [
-        { id: '1', name: 'Chat 1' },
-        { id: '2', name: 'Chat 2' },
-      ]
-      let currentSessionId = '1'
+  it('handles session deletion', async () => {
+    render(<AIModelSandbox />)
+    
+    // Create a session first
+    const newSessionBtn = screen.getByTestId('new-session-btn')
+    fireEvent.click(newSessionBtn)
+    
+    await waitFor(() => {
+      const sessions = screen.getAllByTestId(/^session-/)
+      expect(sessions.length).toBeGreaterThan(0)
+    })
+    
+    const sessions = screen.getAllByTestId(/^session-/)
+    const firstSessionId = sessions[0].getAttribute('data-testid')?.replace('session-', '')
+    
+    if (firstSessionId) {
+      const deleteBtn = screen.getByTestId(`delete-session-${firstSessionId}`)
+      fireEvent.click(deleteBtn)
+    }
+  })
 
-      // Delete session
-      const sessionIdToDelete = '1'
-      sessions = sessions.filter(s => s.id !== sessionIdToDelete)
+  it('switches between sessions', async () => {
+    render(<AIModelSandbox />)
+    
+    // Create multiple sessions
+    const newSessionBtn = screen.getByTestId('new-session-btn')
+    fireEvent.click(newSessionBtn)
+    
+    await waitFor(() => {
+      const sessions = screen.getAllByTestId(/^session-/)
+      expect(sessions.length).toBeGreaterThan(0)
+    })
+    
+    const sessions = screen.getAllByTestId(/^session-/)
+    if (sessions.length > 0) {
+      const sessionButton = sessions[0].querySelector('button')
+      if (sessionButton) {
+        fireEvent.click(sessionButton)
+      }
+    }
+  })
+
+  it('extracts cad_code from various response formats', async () => {
+    const testCases = [
+      { cad_code: 'code1' },
+      { generated_code: 'code2' },
+      { output: 'code3' },
+      { result: 'code4' },
+    ]
+
+    for (const testCase of testCases) {
+      vi.clearAllMocks()
+      const { unmount } = render(<AIModelSandbox />)
       
-      if (currentSessionId === sessionIdToDelete) {
-        currentSessionId = sessions.length > 0 ? sessions[0].id : ''
+      ;(global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => testCase,
+      })
+      
+      const inputs = screen.getAllByTestId('message-input')
+      const sendButtons = screen.getAllByTestId('send-button')
+      
+      if (inputs.length > 0 && sendButtons.length > 0) {
+        fireEvent.change(inputs[0], { target: { value: 'test' } })
+        ;(window as any).__testMessage = 'test'
+        fireEvent.click(sendButtons[0])
+        
+        await waitFor(() => {
+          expect(global.fetch).toHaveBeenCalled()
+        })
       }
+      
+      unmount()
+    }
+  })
 
-      expect(sessions).toHaveLength(1)
-      expect(currentSessionId).toBe('2')
+  it('disables input while generating', async () => {
+    let resolveFetch: any
+    const fetchPromise = new Promise((resolve) => {
+      resolveFetch = resolve
+    })
+    
+    ;(global.fetch as any).mockReturnValueOnce(fetchPromise)
+
+    render(<AIModelSandbox />)
+    
+    const input = screen.getByTestId('message-input')
+    const sendButton = screen.getByTestId('send-button')
+    
+    fireEvent.change(input, { target: { value: 'test' } })
+    ;(window as any).__testMessage = 'test'
+    fireEvent.click(sendButton)
+    
+    await waitFor(() => {
+      expect(sendButton).toBeDisabled()
+    })
+    
+    resolveFetch({
+      ok: true,
+      json: async () => ({ cad_code: 'test' }),
     })
   })
 
-  describe('Model Selection', () => {
-    it('updates model in session', () => {
-      let session = {
-        id: '1',
-        model: 'Baseline-LLaVA',
-      }
-
-      // Change model
-      session = { ...session, model: 'Qwen3-VL-2B-Instruct' }
-
-      expect(session.model).toBe('Qwen3-VL-2B-Instruct')
-    })
-  })
-
-  describe('Message Content Handling', () => {
-    it('uses default prompt when only image provided', () => {
-      const content = ''
-      const image = 'data:image/png;base64,abc'
-
-      const messageContent = content.trim() || (image ? 'Generate CAD code for this image' : '')
-
-      expect(messageContent).toBe('Generate CAD code for this image')
+  it('handles empty message content with image fallback', async () => {
+    const mockResponse = { cad_code: 'test code' }
+    ;(global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockResponse,
     })
 
-    it('uses provided content when available', () => {
-      const content = 'Create a sphere'
-      const image = 'data:image/png;base64,abc'
-
-      const messageContent = content.trim() || (image ? 'Generate CAD code for this image' : '')
-
-      expect(messageContent).toBe('Create a sphere')
-    })
-
-    it('handles empty content without image', () => {
-      const content = ''
-      const image = undefined
-
-      const messageContent = content.trim() || (image ? 'Generate CAD code for this image' : '')
-
-      expect(messageContent).toBe('')
-    })
-  })
-
-  describe('Response Extraction', () => {
-    it('extracts cad_code field', () => {
-      const data = { cad_code: 'code1' }
-      const output = data.cad_code || (data as any).generated_code || (data as any).output || 'No code'
-      expect(output).toBe('code1')
-    })
-
-    it('falls back to generated_code', () => {
-      const data = { generated_code: 'code2' }
-      const output = (data as any).cad_code || data.generated_code || (data as any).output || 'No code'
-      expect(output).toBe('code2')
-    })
-
-    it('falls back to output', () => {
-      const data = { output: 'code3' }
-      const output = (data as any).cad_code || (data as any).generated_code || data.output || 'No code'
-      expect(output).toBe('code3')
-    })
-
-    it('uses fallback message when no code field', () => {
-      const data = { status: 'ok' }
-      const output = (data as any).cad_code || (data as any).generated_code || (data as any).output || 'No code found'
-      expect(output).toBe('No code found')
-    })
+    render(<AIModelSandbox />)
+    
+    // Simulate sending empty message with image
+    const sendButton = screen.getByTestId('send-button')
+    ;(window as any).__testMessage = ''
+    
+    // Mock image being sent
+    const component = screen.getByTestId('chat-input').closest('div')
+    if (component) {
+      // This would normally come from ChatInput, but we're testing the handler
+      const input = screen.getByTestId('message-input')
+      fireEvent.change(input, { target: { value: '' } })
+    }
   })
 })

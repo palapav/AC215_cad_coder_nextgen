@@ -383,8 +383,8 @@ jobs:
           for f in \
             coverage-reports/backend-coverage/backend.xml \
             coverage-reports/model-finetuning-coverage/model_finetuning.xml \
-            coverage-reports/datapipeline-coverage/datapipeline.xml \
-            coverage-reports/data-versioning-coverage/data_versioning.xml
+            coverage-reports/data-versioning-coverage/data_versioning.xml \
+            coverage-reports/ui-coverage/cobertura-coverage.xml
           do
             if [ -f "$f" ]; then
               COVERAGE_FILES="$COVERAGE_FILES $f"
