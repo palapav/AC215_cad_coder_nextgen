@@ -1,0 +1,402 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION_BACKEND: '3.11'
+  PYTHON_VERSION_FINETUNING: '3.10'
+  NODE_VERSION: '20'
+
+jobs:
+  # ============================================================================
+  # LINTING AND CODE QUALITY
+  # ============================================================================
+  lint-python:
+    name: Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_BACKEND }}
+      
+      - name: Install linters
+        run: pip install ruff black isort
+      
+      - name: Run Ruff (fast linter)
+        run: |
+          ruff check src/ \
+            --ignore E501,F401,F841,E402 \
+            --exclude "**/node_modules/**,**/__pycache__/**,**/env/**" \
+            --output-format=github
+        continue-on-error: true
+      
+      - name: Run Black (formatter check)
+        run: |
+          black --check src/ \
+            --exclude "(node_modules|\.git|__pycache__|env|\.venv)" \
+            --line-length 120
+        continue-on-error: true
+
+  lint-frontend:
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/ui
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: src/ui/package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run TypeScript type check
+        run: npm run type-check || true
+      
+      - name: Build frontend (validates code)
+        run: npm run build
+
+  # ============================================================================
+  # MODEL FINE-TUNING TESTS (Containerized, CPU-only)
+  # ============================================================================
+  model-finetuning-tests:
+    name: Model Fine-tuning Tests (Docker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/model_finetuning
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create coverage directory
+        run: mkdir -p coverage
+      
+      - name: Build and run tests via Docker Compose
+        run: |
+          docker compose run --rm test
+      
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: model-finetuning-coverage
+          path: src/model_finetuning/coverage/
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # BACKEND TESTS (Containerized)
+  # ============================================================================
+  backend-tests:
+    name: Backend Tests (Docker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/cad_coder_backend
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create coverage directory
+        run: mkdir -p coverage
+      
+      - name: Build test image
+        run: docker compose -f docker-compose.test.yml build test
+      
+      - name: Run unit tests with coverage
+        run: |
+          docker compose -f docker-compose.test.yml run --rm test
+        env:
+          QWEN_MODAL_MAX_NEW_TOKENS: 128
+          LLAVA_MODAL_MAX_NEW_TOKENS: 128
+      
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: src/cad_coder_backend/coverage/
+          if-no-files-found: ignore
+      
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
+  # ============================================================================
+  # BACKEND INTEGRATION TESTS (with real MongoDB)
+  # ============================================================================
+  backend-integration-tests:
+    name: Backend Integration Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/cad_coder_backend
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run integration tests
+        run: |
+          docker compose -f docker-compose.test.yml run --rm integration
+        env:
+          QWEN_INFERENCE_BACKEND: mock
+          LLAVA_INFERENCE_BACKEND: mock
+          QWEN_MODAL_MAX_NEW_TOKENS: 128
+          LLAVA_MODAL_MAX_NEW_TOKENS: 128
+          ENABLE_RAG: "false"
+      
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
+  # ============================================================================
+  # DATA VERSIONING TESTS (Containerized)
+  # ============================================================================
+  data-versioning-tests:
+    name: Data Versioning Tests (Docker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/data_versioning
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create coverage directory
+        run: mkdir -p coverage
+      
+      - name: Build test image
+        run: docker compose -f docker-compose.test.yml build test
+      
+      - name: Run tests
+        run: docker compose -f docker-compose.test.yml run --rm test
+        continue-on-error: true
+      
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-versioning-coverage
+          path: src/data_versioning/coverage/
+          if-no-files-found: ignore
+      
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
+  # ============================================================================
+  # UI TESTS (React/Vitest)
+  # ============================================================================
+  ui-tests:
+    name: UI Tests (Vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/ui
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: src/ui/package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        continue-on-error: true
+      
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-coverage
+          path: src/ui/coverage/
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # DOCKER BUILD TESTS
+  # ============================================================================
+  docker-build:
+    name: Docker Build Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build model_finetuning Docker image
+        run: |
+          cd src/model_finetuning
+          docker build -t model-finetuning-test .
+      
+      - name: Build data_versioning Docker image
+        run: |
+          cd src/data_versioning
+          docker build -t data-versioning-test .
+      
+      - name: Build backend Docker image
+        run: |
+          cd src/cad_coder_backend
+          docker build -t backend-test .
+      
+      - name: Build backend test Docker image
+        run: |
+          cd src/cad_coder_backend
+          docker build -f Dockerfile.test -t backend-test-runner .
+      
+      - name: Build frontend Docker image
+        run: |
+          cd src/ui
+          docker build -t frontend-test .
+
+  # ============================================================================
+  # END-TO-END TESTS (Optional - requires Modal credentials)
+  # ============================================================================
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [backend-tests, lint-frontend]
+    # Always run E2E tests (they use mocked backends by default, so no credentials needed)
+    if: always()
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create test environment file (optional)
+        run: |
+          # Create .env.test only if secrets are available (for real E2E testing)
+          # Otherwise, tests will use mocked backends via environment variables
+          if [ -n "${{ secrets.MODAL_TOKEN_ID }}" ] && [ -n "${{ secrets.MODAL_TOKEN_SECRET }}" ]; then
+            cat > src/.env.test << EOF
+          MONGO_URI=mongodb://mongo-test:27017
+          MONGO_DB=test_e2e
+          MODAL_TOKEN_ID=${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET=${{ secrets.MODAL_TOKEN_SECRET }}
+          QWEN_MODAL_APP=${{ secrets.QWEN_MODAL_APP || 'cad-coder-qwen3' }}
+          QWEN_MODAL_FUNCTION=${{ secrets.QWEN_MODAL_FUNCTION || 'qwen_modal_infer' }}
+          LLAVA_MODAL_APP=${{ secrets.LLAVA_MODAL_APP || 'cad-coder-llava' }}
+          LLAVA_MODAL_FUNCTION=${{ secrets.LLAVA_MODAL_FUNCTION || 'llava_modal_infer' }}
+          QWEN_MODAL_MAX_NEW_TOKENS=128
+          LLAVA_MODAL_MAX_NEW_TOKENS=128
+          QWEN_MODAL_TEMPERATURE=0.0
+          LLAVA_MODAL_TEMPERATURE=0.0
+          ENABLE_RAG=false
+          EOF
+            echo "Created .env.test with Modal credentials"
+          else
+            echo "No Modal credentials found - using mocked backends"
+          fi
+        continue-on-error: true
+      
+      - name: Run E2E tests
+        run: |
+          cd src/cad_coder_backend
+          docker compose -f docker-compose.test.yml run --rm e2e
+        env:
+          # Use mocked backends by default (override if .env.test created above)
+          QWEN_INFERENCE_BACKEND: mock
+          LLAVA_INFERENCE_BACKEND: mock
+          ENABLE_RAG: "false"
+          QWEN_MODAL_MAX_NEW_TOKENS: 128
+          LLAVA_MODAL_MAX_NEW_TOKENS: 128
+          # Pass secrets as env vars if available (empty strings if not set)
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          QWEN_MODAL_APP: ${{ secrets.QWEN_MODAL_APP }}
+          QWEN_MODAL_FUNCTION: ${{ secrets.QWEN_MODAL_FUNCTION }}
+          LLAVA_MODAL_APP: ${{ secrets.LLAVA_MODAL_APP }}
+          LLAVA_MODAL_FUNCTION: ${{ secrets.LLAVA_MODAL_FUNCTION }}
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          cd src/cad_coder_backend
+          docker compose -f docker-compose.test.yml down -v
+          # Clean up .env.test if created
+          rm -f src/.env.test || true
+
+  # ============================================================================
+  # COVERAGE SUMMARY
+  # ============================================================================
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    needs: [model-finetuning-tests, backend-tests, data-versioning-tests, ui-tests]
+    if: always()
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_BACKEND }}
+      
+      - name: Download all coverage reports
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-reports
+        continue-on-error: true
+      
+      - name: Display coverage summary
+        run: |
+          echo "=============================================="
+          echo "           COVERAGE SUMMARY"
+          echo "=============================================="
+          echo ""
+          
+          for dir in coverage-reports/*/; do
+            name=$(basename "$dir")
+            echo "$name: ✓ Report available"
+            ls -la "$dir" 2>/dev/null || echo "  (empty)"
+            echo ""
+          done
+          
+          echo "=============================================="
+          echo "Coverage reports uploaded as artifacts"
+          echo "=============================================="
+
+      - name: Aggregate coverage and enforce threshold
+        run: |
+          # Find all coverage XML files
+          COVERAGE_FILES=""
+          for f in \
+            coverage-reports/backend-coverage/backend.xml \
+            coverage-reports/model-finetuning-coverage/model_finetuning.xml \
+            coverage-reports/datapipeline-coverage/datapipeline.xml \
+            coverage-reports/data-versioning-coverage/data_versioning.xml
+          do
+            if [ -f "$f" ]; then
+              COVERAGE_FILES="$COVERAGE_FILES $f"
+            fi
+          done
+          
+          if [ -n "$COVERAGE_FILES" ]; then
+            python scripts/aggregate_coverage.py \
+              --threshold 0.50 \
+              --ignore-missing \
+              $COVERAGE_FILES
+          else
+            echo "Warning: No coverage files found to aggregate"
+            exit 0
+          fi

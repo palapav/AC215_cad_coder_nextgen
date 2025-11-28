@@ -76,7 +76,7 @@ src/ui/
 
 ### 1. **AIModelSandbox.tsx** (Main Application)
 The central component orchestrating the entire chat interface:
-- **Model Selection**: Allows users to switch between AI models (Baseline-LLaVA, Qwen-2.5-xB)
+- **Model Selection**: Allows users to switch between AI models (Baseline-LLaVA, Qwen3-VL-2B-Instruct)
 - **Session Management**: Create, delete, and switch between chat sessions
 - **Message Handling**: Processes user input (text + images) and generates mock AI responses
 - **State Management**: Uses React hooks (`useState`) to manage sessions, messages, and UI state
@@ -90,7 +90,7 @@ The central component orchestrating the entire chat interface:
 ### 2. **ModelSelector.tsx**
 Dropdown component for selecting the active AI model:
 - **Baseline-LLaVA**: Vision-language model for multimodal tasks
-- **Qwen-2.5-xB**: Advanced reasoning and code generation model
+- **Qwen3-VL-2B-Instruct**: Vision-language model (2B parameters) fine-tuned for CAD code generation
 
 ### 3. **ChatHistory.tsx**
 Displays the conversation history with:
@@ -311,7 +311,7 @@ docker run -d -p 8080:80 --name cad-coder-ui-container cad-coder-ui
 - Use the **Model Selector** dropdown at the top
 - Choose between:
   - **Baseline-LLaVA**: Best for multimodal (text + image) tasks
-  - **Qwen-2.5-xB**: Best for code generation and reasoning
+  - **Qwen3-VL-2B-Instruct**: Best for CAD code generation (2B parameter vision-language model)
 
 ### 3. **Send a Text Query**
 - Type your message in the input box at the bottom
@@ -346,7 +346,7 @@ docker run -d -p 8080:80 --name cad-coder-ui-container cad-coder-ui
 
 ### Planned Enhancements
 - **Backend API Integration**: Connect to the RAG pipeline and LLM inference endpoints
-- **Real AI Responses**: Replace mock responses with actual model outputs (Baseline-LLaVA, Qwen-2.5-xB, etc.)
+- **Real AI Responses**: Replace mock responses with actual model outputs (Baseline-LLaVA, Qwen3-VL-2B-Instruct, etc.)
 - **Session Persistence**: Store chat history in a database (e.g., PostgreSQL, MongoDB)
 - **User Authentication**: Add login/signup with session management
 - **Streaming Responses**: Implement real-time streaming of AI responses (like ChatGPT)

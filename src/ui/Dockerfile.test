@@ -1,0 +1,17 @@
+# UI Test Container
+FROM node:20-slim
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies including dev dependencies
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Default command runs tests with coverage
+CMD ["npm", "run", "test:coverage"]
+

@@ -1,0 +1,167 @@
+# Root-level Docker Compose for running ALL repository tests
+# Usage:
+#   docker compose -f docker-compose.tests.yml up --build --abort-on-container-exit repo-tests
+#
+# This orchestrates tests across all components:
+#   - Backend (unit + integration)
+#   - Model Fine-tuning (CPU-only)
+#   - Data Pipeline (ingestion, preprocessing, RAG)
+#   - Data Versioning (script validation)
+#   - UI (React component tests)
+
+services:
+  # ============================================================================
+  # MongoDB for integration tests
+  # ============================================================================
+  mongo-test:
+    image: mongo:6
+    ports:
+      - "27018:27017"
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Backend Tests
+  # ============================================================================
+  backend-unit:
+    build:
+      context: ./src/cad_coder_backend
+      dockerfile: Dockerfile.test
+    depends_on:
+      mongo-test:
+        condition: service_healthy
+    environment:
+      QWEN_INFERENCE_BACKEND: mock
+      LLAVA_INFERENCE_BACKEND: mock
+      ENABLE_RAG: "false"
+      MONGO_URI: mongodb://mongo-test:27017
+      MONGO_DB: test_cad_coder
+      QWEN_MODAL_MAX_NEW_TOKENS: 128
+      LLAVA_MODAL_MAX_NEW_TOKENS: 128
+    volumes:
+      - ./src/cad_coder_backend/coverage:/app/coverage
+    command: >
+      pytest app/tests/ -v
+      --cov=app
+      --cov-config=.coveragerc
+      --cov-report=term-missing
+      --cov-report=xml:/app/coverage/backend.xml
+
+  backend-integration:
+    build:
+      context: ./src/cad_coder_backend
+      dockerfile: Dockerfile.test
+    depends_on:
+      mongo-test:
+        condition: service_healthy
+    environment:
+      QWEN_INFERENCE_BACKEND: mock
+      LLAVA_INFERENCE_BACKEND: mock
+      ENABLE_RAG: "false"
+      MONGO_URI: mongodb://mongo-test:27017
+      MONGO_DB: test_integration
+      QWEN_MODAL_MAX_NEW_TOKENS: 128
+      LLAVA_MODAL_MAX_NEW_TOKENS: 128
+    command: >
+      pytest app/tests/test_routers.py -v
+      -m "not e2e"
+
+  # ============================================================================
+  # Model Fine-tuning Tests (CPU-only)
+  # ============================================================================
+  model-finetuning-test:
+    build:
+      context: ./src/model_finetuning
+      dockerfile: Dockerfile
+    environment:
+      PYTHONPATH: /app:/app/CADRL
+    volumes:
+      - ./src/model_finetuning/coverage:/app/coverage
+    command: >
+      pytest tests/ -v
+      --cov=.
+      --cov-report=term-missing
+      --cov-report=xml:/app/coverage/model_finetuning.xml
+
+  # ============================================================================
+  # Data Pipeline Tests
+  # ============================================================================
+  datapipeline-test:
+    build:
+      context: ./src/datapipeline
+      dockerfile: Dockerfile.test
+    environment:
+      PYTHONPATH: /app
+      GOOGLE_APPLICATION_CREDENTIALS: ""
+      HF_TOKEN: test_token
+    volumes:
+      - ./src/datapipeline/coverage:/app/coverage
+    command: >
+      pytest tests/ -v
+      --cov=data_ingestion
+      --cov=data_preprocessing
+      --cov=rag
+      --cov-report=term-missing
+      --cov-report=xml:/app/coverage/datapipeline.xml
+
+  # ============================================================================
+  # Data Versioning Tests
+  # ============================================================================
+  data-versioning-test:
+    build:
+      context: ./src/data_versioning
+      dockerfile: Dockerfile.test
+    environment:
+      PYTHONPATH: /app:/app/scripts
+    volumes:
+      - ./src/data_versioning/coverage:/app/coverage
+    command: >
+      pytest tests/ -v
+      --cov=scripts
+      --cov-report=term-missing
+      --cov-report=xml:/app/coverage/data_versioning.xml
+
+  # ============================================================================
+  # UI Tests (React/Vitest)
+  # ============================================================================
+  ui-test:
+    build:
+      context: ./src/ui
+      dockerfile: Dockerfile.test
+    volumes:
+      - ./src/ui/coverage:/app/coverage
+    command: npm run test:coverage
+
+  # ============================================================================
+  # Coverage Aggregation (Final Step)
+  # ============================================================================
+  repo-tests:
+    image: python:3.11-slim
+    depends_on:
+      backend-unit:
+        condition: service_completed_successfully
+      backend-integration:
+        condition: service_completed_successfully
+      model-finetuning-test:
+        condition: service_completed_successfully
+      datapipeline-test:
+        condition: service_completed_successfully
+      data-versioning-test:
+        condition: service_completed_successfully
+      ui-test:
+        condition: service_completed_successfully
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    command: >
+      python scripts/aggregate_coverage.py
+      --threshold 0.50
+      src/cad_coder_backend/coverage/backend.xml
+      src/model_finetuning/coverage/model_finetuning.xml
+      src/datapipeline/coverage/datapipeline.xml
+      src/data_versioning/coverage/data_versioning.xml

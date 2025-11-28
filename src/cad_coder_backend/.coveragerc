@@ -1,0 +1,33 @@
+[run]
+source = app
+omit =
+    # Test files
+    app/tests/*
+    
+    # Database initialization (runs on import)
+    app/services/db_service.py
+    
+    # Main entry point
+    app/main.py
+    
+    # Add dummy data script
+    app/add_dummy_data.py
+    
+    # Legacy local scripts not used in production
+    app/test_mongodb_crud.py
+    
+    # Init files
+    */__init__.py
+
+[report]
+omit =
+    app/test_mongodb_crud.py
+exclude_lines =
+    pragma: no cover
+    if __name__ == "__main__":
+    raise NotImplementedError
+    if TYPE_CHECKING:
+
+fail_under = 50
+show_missing = true
+

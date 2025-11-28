@@ -1,0 +1,20 @@
+# Docker Compose for data versioning testing
+# Usage:
+#   docker compose -f docker-compose.test.yml run --rm test
+
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: cadcoder-data-versioning-test
+    volumes:
+      - ./coverage:/app/coverage
+    environment:
+      - PYTHONPATH=/app:/app/scripts
+    command: >
+      pytest tests/ -v 
+      --cov=scripts 
+      --cov-report=term-missing 
+      --cov-report=xml:/app/coverage/data_versioning.xml
+

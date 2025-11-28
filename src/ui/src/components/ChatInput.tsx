@@ -3,6 +3,7 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Send, Paperclip, X } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+/*import { generateCADCode } from "../hooks/useApi";*/
 
 interface ChatInputProps {
   onSendMessage: (message: string, image?: string) => void;
@@ -17,11 +18,15 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if ((message.trim() || selectedImage) && !disabled) {
+      // Just send the message to the parent component
       onSendMessage(message.trim(), selectedImage || undefined);
+  
+      // Reset input + image
       setMessage("");
       setSelectedImage(null);
     }
   };
+   
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

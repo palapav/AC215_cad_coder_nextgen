@@ -1,0 +1,20 @@
+[run]
+omit =
+    # Heavy training / evaluation entrypoints (GPU-only, not exercised in CI)
+    centralized_train.py
+    evaluate_model.py
+    evaluate_model_minimal.py
+
+    # Federated / trainer stack built on accelerate + FSDP
+    CADRL/Trainers/*
+
+    # Thin package initializers and low-level patches (covered indirectly)
+    CADRL/DataUtils/__init__.py
+    utils/patches.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == "__main__":
+
+

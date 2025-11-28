@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  dvc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount data directory so changes persist
+      - ./data:/app/data
+      # Mount scripts (if you want to edit them)
+      - ./scripts:/app/scripts
+      # Mount raw data for V1 creation (from datapipeline) - optional
+      - ../datapipeline/data_ingestion/data:/app/raw_data:ro
+      # Mount subset file for user data preparation
+      - ../model_inference/inference:/app/model_inference_data:ro
+      # Mount DVC config directory
+      - ./.dvc:/app/.dvc
+    working_dir: /app
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    environment:
+      - PYTHONUNBUFFERED=1
+

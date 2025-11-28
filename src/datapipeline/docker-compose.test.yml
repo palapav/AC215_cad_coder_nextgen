@@ -1,0 +1,24 @@
+# Docker Compose for datapipeline testing
+# Usage:
+#   docker compose -f docker-compose.test.yml run --rm test
+
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: cadcoder-datapipeline-test
+    volumes:
+      - ./coverage:/app/coverage
+    environment:
+      - PYTHONPATH=/app
+      - GOOGLE_APPLICATION_CREDENTIALS=
+      - HF_TOKEN=test_token
+    command: >
+      pytest tests/ -v 
+      --cov=data_ingestion 
+      --cov=data_preprocessing 
+      --cov=rag 
+      --cov-report=term-missing 
+      --cov-report=xml:/app/coverage/datapipeline.xml
+

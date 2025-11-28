@@ -1,0 +1,33 @@
+# Docker Compose for UI testing
+# Usage:
+#   docker compose -f docker-compose.test.yml run --rm test        # Run tests
+#   docker compose -f docker-compose.test.yml run --rm coverage    # Run with coverage
+#   docker compose -f docker-compose.test.yml run --rm lint        # Run linting
+
+services:
+  # Unit tests with coverage
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: cadcoder-ui-test
+    volumes:
+      - ./coverage:/app/coverage
+    command: npm run test:coverage
+
+  # Lint/type check
+  lint:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: cadcoder-ui-lint
+    command: npm run type-check
+
+  # Build check
+  build:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: cadcoder-ui-build
+    command: npm run build
+

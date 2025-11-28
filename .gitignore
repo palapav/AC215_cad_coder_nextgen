@@ -2,6 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
+*.pt
 
 # C extensions
 *.so
@@ -39,6 +40,9 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
+coverage/
+src/cad_coder_backend/coverage/
+src/model_finetuning/coverage/
 .tox/
 .nox/
 .coverage
@@ -136,6 +140,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.test
 .envrc
 .venv
 env/
@@ -205,3 +210,4 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+.DS_Store
