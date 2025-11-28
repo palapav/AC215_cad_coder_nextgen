@@ -360,7 +360,7 @@ docker compose -f docker-compose.tests.yml down -v
 
 ## 🔗 Related Documentation
 
-- [Model Fine-tuning](../docs/MODEL_FINETUNING.md)
-- [Data Versioning](../docs/DATA_VERSIONING.md)
-- [Application Design](../docs/APPLICATION_DESIGN.md)
-- [Quick Start](../QUICK_START.md)
+- [Model Fine-tuning](MODEL_FINETUNING.md)
+- [Data Versioning](DATA_VERSIONING.md)
+- [Application Design](APPLICATION_DESIGN.md)
+- [Quick Start](../README.md)
