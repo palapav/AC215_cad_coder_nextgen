@@ -31,6 +31,19 @@ EVALUATION_CONFIG = {
     "batch_size": 8,
 }
 
+# Testing/Development configuration
+# Set these to limit samples for quick testing of the pipeline
+# Set to None to use full dataset
+# 
+# Usage:
+#   - Command line: --max-training-samples 100 --max-test-samples 50
+#   - Or set here for default test mode behavior
+TEST_CONFIG = {
+    "max_training_samples": None,  # Limit training samples (e.g., 100 for quick test)
+    "max_test_samples": None,      # Limit test samples for evaluation (e.g., 50 for quick test)
+    "max_val_samples": 1000,       # Already limited in TRAINING_CONFIG, kept for consistency
+}
+
 # Data paths (relative to project root)
 DATA_PATHS = {
     "client1": "./data/partitioned/client1",

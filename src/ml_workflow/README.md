@@ -18,11 +18,18 @@ modal token new  # Authenticate with Modal
 ### Run the Workflow
 
 ```bash
-# Manual trigger
+# Full dataset run
 modal run src/ml_workflow/modal_workflow.py \
   --workflow-id test_001 \
   --trigger-type manual \
   --deploy-to-modal
+
+# Test mode: Run on limited samples (quick pipeline test)
+modal run src/ml_workflow/modal_workflow.py \
+  --workflow-id test_quick \
+  --trigger-type manual \
+  --max-training-samples 100 \
+  --max-test-samples 50
 ```
 
 ## Overview
@@ -65,7 +72,7 @@ Models must meet all thresholds to be deployed:
 
 ## Usage Examples
 
-### Manual Trigger
+### Full Dataset Run
 
 ```bash
 modal run src/ml_workflow/modal_workflow.py \
@@ -73,6 +80,25 @@ modal run src/ml_workflow/modal_workflow.py \
   --trigger-type manual \
   --deploy-to-modal
 ```
+
+### Test Mode (Limited Samples)
+
+Run the complete pipeline on a small subset of data to quickly verify the workflow:
+
+```bash
+# Test with 100 training samples and 50 test samples
+modal run src/ml_workflow/modal_workflow.py \
+  --workflow-id test_pipeline \
+  --trigger-type manual \
+  --max-training-samples 100 \
+  --max-test-samples 50 \
+  --deploy-to-modal
+```
+
+This is useful for:
+- **Quick validation**: Test the entire pipeline end-to-end without processing the full dataset
+- **Development**: Verify code changes work correctly before running expensive full training
+- **CI/CD**: Run pipeline tests in automated environments with limited resources
 
 ### Python API
 

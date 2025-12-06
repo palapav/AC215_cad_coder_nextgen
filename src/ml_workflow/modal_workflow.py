@@ -188,7 +188,8 @@ def run_training(
     workflow_id: str,
     training_config: Dict[str, Any],
     data_paths: Dict[str, str],
-    output_dir: str = "/models/trained"
+    output_dir: str = "/models/trained",
+    max_samples: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Run model training step.
@@ -198,6 +199,7 @@ def run_training(
         training_config: Training configuration
         data_paths: Dictionary with data paths
         output_dir: Output directory for trained model
+        max_samples: Limit training samples for testing (None = use all samples)
         
     Returns:
         Dictionary with training results
@@ -285,7 +287,14 @@ def run_training(
     os.makedirs(model_output_dir, exist_ok=True)
     
     # In production, this would call centralized_train.py with proper args
+    # Pass max_samples if provided for testing
+    if max_samples is not None:
+        logger.info(f"🧪 TEST MODE: Limiting training to {max_samples} samples")
+        training_config = training_config.copy()
+        training_config["max_samples"] = max_samples
+    
     # For now, we'll mock the training process
+    # In actual implementation, would call: train_main() with args including max_samples
     
     result = {
         "workflow_id": workflow_id,
@@ -319,7 +328,8 @@ def run_evaluation(
     model_path: str,
     test_data_path: str,
     evaluation_config: Dict[str, Any],
-    output_dir: str = "/models/evaluations"
+    output_dir: str = "/models/evaluations",
+    max_test_samples: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Run model evaluation step.
@@ -330,6 +340,7 @@ def run_evaluation(
         test_data_path: Path to test dataset
         evaluation_config: Evaluation configuration
         output_dir: Output directory for evaluation results
+        max_test_samples: Limit test samples for testing (None = use all samples)
         
     Returns:
         Dictionary with evaluation results
@@ -347,6 +358,12 @@ def run_evaluation(
     results_path = os.path.join(eval_output_dir, "evaluation_results.json")
     
     # In production, this would call evaluate_model.py with proper args
+    # Pass max_test_samples if provided for testing
+    if max_test_samples is not None:
+        logger.info(f"🧪 TEST MODE: Limiting evaluation to {max_test_samples} test samples")
+        evaluation_config = evaluation_config.copy()
+        evaluation_config["max_test_samples"] = max_test_samples
+    
     # For now, we'll use mock results based on actual evaluation format
     
     # Mock evaluation results (based on actual format from evaluate_model.py)
@@ -524,7 +541,9 @@ def run_full_workflow(
     evaluation_config: Optional[Dict[str, Any]] = None,
     data_paths: Optional[Dict[str, str]] = None,
     deploy_to_modal: bool = True,
-    deploy_to_gcp: bool = False
+    deploy_to_gcp: bool = False,
+    max_training_samples: Optional[int] = None,
+    max_test_samples: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Run the complete ML workflow: preprocessing -> training -> evaluation -> validation -> deployment.
@@ -537,12 +556,19 @@ def run_full_workflow(
         data_paths: Data paths dictionary (uses defaults if not provided)
         deploy_to_modal: Whether to deploy to Modal Labs
         deploy_to_gcp: Whether to deploy to GCP (mocked)
+        max_training_samples: Limit training samples for testing (None = use all samples)
+        max_test_samples: Limit test samples for evaluation (None = use all samples)
         
     Returns:
         Complete workflow results
     """
     logger.info(f"🚀 Starting full ML workflow: {workflow_id}")
     logger.info(f"   Trigger: {trigger_event.get('trigger_type', 'unknown')}")
+    
+    if max_training_samples is not None:
+        logger.info(f"🧪 TEST MODE: Limiting training to {max_training_samples} samples")
+    if max_test_samples is not None:
+        logger.info(f"🧪 TEST MODE: Limiting evaluation to {max_test_samples} test samples")
     
     # Import config
     sys.path.insert(0, "/app/ml_workflow")
@@ -577,7 +603,8 @@ def run_full_workflow(
             workflow_id=workflow_id,
             training_config=training_config,
             data_paths=data_paths,
-            output_dir="/models/trained"
+            output_dir="/models/trained",
+            max_samples=max_training_samples
         )
         workflow_results["steps"]["training"] = training_result
         
@@ -588,7 +615,8 @@ def run_full_workflow(
             model_path=training_result["model_path"],
             test_data_path=data_paths.get("test", DATA_PATHS["test"]),
             evaluation_config=evaluation_config,
-            output_dir="/models/evaluations"
+            output_dir="/models/evaluations",
+            max_test_samples=max_test_samples
         )
         workflow_results["steps"]["evaluation"] = evaluation_result
         
@@ -635,12 +663,18 @@ def main(
     trigger_type: str = "manual",
     deploy_to_modal: bool = True,
     deploy_to_gcp: bool = False,
+    max_training_samples: Optional[int] = None,
+    max_test_samples: Optional[int] = None,
 ):
     """
     Local entrypoint to trigger ML workflow.
     
     Usage:
+        # Full dataset run
         modal run src/ml_workflow/modal_workflow.py --workflow-id test_001 --trigger-type manual
+        
+        # Test mode with limited samples
+        modal run src/ml_workflow/modal_workflow.py --workflow-id test_001 --max-training-samples 100 --max-test-samples 50
     """
     if workflow_id is None:
         workflow_id = f"workflow_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -655,12 +689,18 @@ def main(
     print(f"   Trigger type: {trigger_type}")
     print(f"   Deploy to Modal: {deploy_to_modal}")
     print(f"   Deploy to GCP: {deploy_to_gcp}")
+    if max_training_samples is not None:
+        print(f"   🧪 TEST MODE: Max training samples: {max_training_samples}")
+    if max_test_samples is not None:
+        print(f"   🧪 TEST MODE: Max test samples: {max_test_samples}")
     
     result = run_full_workflow.remote(
         workflow_id=workflow_id,
         trigger_event=trigger_event,
         deploy_to_modal=deploy_to_modal,
-        deploy_to_gcp=deploy_to_gcp
+        deploy_to_gcp=deploy_to_gcp,
+        max_training_samples=max_training_samples,
+        max_test_samples=max_test_samples
     )
     
     print("\n" + "="*60)
