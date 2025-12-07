@@ -57,6 +57,11 @@ jobs:
         run: |
           docker buildx prune -af || true
           docker system df
+
+      - name: Docker aggressive cleanup
+        run: |
+          docker system prune -af || true
+          docker builder prune -af || true
       
       - name: Set Artifact Registry URL
         id: registry
@@ -116,34 +121,6 @@ jobs:
           build-args: |
             VITE_API_URL=/api
       
-      # Qwen Inference Image
-      - name: Build and push Qwen Inference image
-        if: github.event.inputs.deploy_models == 'true' || github.event_name == 'push'
-        uses: docker/build-push-action@v5
-        with:
-          context: ./src/model_inference/qwen
-          file: ./src/model_inference/qwen/Dockerfile.gke
-          push: true
-          tags: |
-            ${{ steps.registry.outputs.url }}/cad-coder-qwen-inference:${{ steps.tags.outputs.tag }}
-            ${{ steps.registry.outputs.url }}/cad-coder-qwen-inference:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      
-      # LLaVA Inference Image
-      - name: Build and push LLaVA Inference image
-        if: github.event.inputs.deploy_models == 'true' || github.event_name == 'push'
-        uses: docker/build-push-action@v5
-        with:
-          context: ./src/model_inference
-          file: ./src/model_inference/llava_modal/Dockerfile.gke
-          push: true
-          tags: |
-            ${{ steps.registry.outputs.url }}/cad-coder-llava-inference:${{ steps.tags.outputs.tag }}
-            ${{ steps.registry.outputs.url }}/cad-coder-llava-inference:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      
       - name: Output image tags
         run: |
           echo "=============================================="
@@ -153,8 +130,6 @@ jobs:
           echo "=============================================="
           echo "  Backend:  ${{ steps.registry.outputs.url }}/cad-coder-backend:${{ steps.tags.outputs.tag }}"
           echo "  Frontend: ${{ steps.registry.outputs.url }}/cad-coder-frontend:${{ steps.tags.outputs.tag }}"
-          echo "  Qwen:     ${{ steps.registry.outputs.url }}/cad-coder-qwen-inference:${{ steps.tags.outputs.tag }}"
-          echo "  LLaVA:    ${{ steps.registry.outputs.url }}/cad-coder-llava-inference:${{ steps.tags.outputs.tag }}"
 
   # ==========================================================================
   # Deploy Infrastructure with Pulumi
