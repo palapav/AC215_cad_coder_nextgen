@@ -32,7 +32,7 @@ env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GCP_REGION: us-central1
   GCP_ZONE: us-central1-a
-  GKE_CLUSTER: cad-coder-cluster
+  GKE_CLUSTER: cad-coder-production
 
 jobs:
   # ==========================================================================
