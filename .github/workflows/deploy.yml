@@ -32,7 +32,7 @@ env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GCP_REGION: us-central1
   GCP_ZONE: us-central1-a
-  GKE_CLUSTER: cad-coder-production
+  GKE_CLUSTER: cad-coder-${{ github.event.inputs.environment || 'production' }}
 
 jobs:
   # ==========================================================================
@@ -269,7 +269,7 @@ jobs:
           # Update image tag
           kubectl set image deployment/backend \
             backend=${{ env.ARTIFACT_REGISTRY }}/cad-coder-backend:${{ env.IMAGE_TAG }} \
-            --namespace=cad-coder
+            --namespace=cad-coder-${{ github.event.inputs.environment || 'production' }}  # <--- CHANGED FROM 'cad-coder'
       
       - name: Deploy Frontend
         run: |
@@ -279,7 +279,7 @@ jobs:
           # Update image tag
           kubectl set image deployment/frontend \
             frontend=${{ env.ARTIFACT_REGISTRY }}/cad-coder-frontend:${{ env.IMAGE_TAG }} \
-            --namespace=cad-coder
+            --namespace=cad-coder-${{ github.event.inputs.environment || 'production' }}  # <--- CHANGED FROM 'cad-coder'
       
       # Inference services are intentionally skipped unless explicitly requested
       # to avoid GPU/HPA errors and extra cost.
