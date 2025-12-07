@@ -217,8 +217,8 @@ cluster = gcp.container.Cluster(
 
 # Standard node pool for backend, frontend, and other services
 standard_node_pool = gcp.container.NodePool(
-    "standard-node-pool-v2",
-    name="standard-pool-v2",
+    "standard-node-pool",
+    name="standard-pool",
     cluster=cluster.name,
     location=zone,
     project=project,
@@ -537,7 +537,7 @@ k8s_provider = k8s.Provider(
 namespace = k8s.core.v1.Namespace(
     "cad-coder-namespace",
     metadata=k8s.meta.v1.ObjectMetaArgs(
-        name=f"cad-coder-{environment}",
+        name="cad-coder",
         labels={
             "app": "cad-coder",
             "environment": environment,
