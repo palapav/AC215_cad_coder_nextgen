@@ -345,6 +345,5 @@ multi-GPU scheduling) to ensure practical latency and scalability.
 Users will include mechanical engineers for rapidly prototyping CAD components, students &
 educators for having an accessible entry point for learning CAD, and makers & hobbyists for
 generating parts without mastering complex CAD software. Benefits over Alternatives: Unlike
-commercial CAD tools or plugins, our system automates code generation directly from natural inputs
-(text/images), provides open, reproducible research into model scaling, and offers a flexible,
+commercial CAD tools or plugins, our system automates code generation directly from natural inputs (text/images), provides open, reproducible research into model scaling, and offers a flexible,
 cloud-deployed interface for broader accessibility.
