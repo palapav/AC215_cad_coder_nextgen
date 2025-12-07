@@ -12,14 +12,14 @@ RUN apt-get update && apt-get install -y \
 # ---------- Working Directory ----------
 WORKDIR /app
 
-# ---------- Install uv (modern resolver/installer) ----------
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir uv
+# ---------- Install pip (no uv) ----------
+RUN pip install --no-cache-dir --upgrade pip
 
-# ---------- Copy lockfiles first for better caching ----------
-COPY pyproject.toml uv.lock* ./
+# ---------- Copy requirements for caching ----------
+COPY requirements.txt ./
 
-# Install dependencies (prefers uv.lock; falls back to resolve if lock missing)
-RUN uv sync --no-dev --no-editable --compile-bytecode
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ---------- Copy Project Source ----------
 COPY . .
