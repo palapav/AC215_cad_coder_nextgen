@@ -281,20 +281,8 @@ jobs:
             frontend=${{ env.ARTIFACT_REGISTRY }}/cad-coder-frontend:${{ env.IMAGE_TAG }} \
             --namespace=cad-coder
       
-      - name: Deploy Inference Services
-        if: github.event.inputs.deploy_models == 'true' || github.event_name == 'push'
-        run: |
-          # Deploy Qwen inference
-          kubectl apply -f infrastructure/kubernetes/qwen-inference-deployment.yaml
-          kubectl set image deployment/qwen-inference \
-            qwen-inference=${{ env.ARTIFACT_REGISTRY }}/cad-coder-qwen-inference:${{ env.IMAGE_TAG }} \
-            --namespace=cad-coder || true
-          
-          # Deploy LLaVA inference
-          kubectl apply -f infrastructure/kubernetes/llava-inference-deployment.yaml
-          kubectl set image deployment/llava-inference \
-            llava-inference=${{ env.ARTIFACT_REGISTRY }}/cad-coder-llava-inference:${{ env.IMAGE_TAG }} \
-            --namespace=cad-coder || true
+      # Inference services are intentionally skipped unless explicitly requested
+      # to avoid GPU/HPA errors and extra cost.
       
       - name: Deploy Ingress
         run: |
