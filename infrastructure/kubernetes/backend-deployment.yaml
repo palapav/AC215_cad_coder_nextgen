@@ -10,6 +10,7 @@ metadata:
     component: backend
 spec:
   replicas: 1
+  progressDeadlineSeconds: 600
   strategy:
     type: Recreate
   selector:

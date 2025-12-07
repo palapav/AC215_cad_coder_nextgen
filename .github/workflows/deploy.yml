@@ -292,10 +292,28 @@ jobs:
       - name: Wait for deployments
         run: |
           echo "Waiting for backend deployment..."
-          kubectl rollout status deployment/backend --namespace=cad-coder --timeout=300s
+          kubectl rollout status deployment/backend --namespace=cad-coder --timeout=600s
           
           echo "Waiting for frontend deployment..."
-          kubectl rollout status deployment/frontend --namespace=cad-coder --timeout=300s
+          kubectl rollout status deployment/frontend --namespace=cad-coder --timeout=600s
+
+      - name: Collect rollout diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== Deployments ==="
+          kubectl get deploy -n cad-coder -o wide || true
+          echo "=== Pods ==="
+          kubectl get pods -n cad-coder -o wide || true
+          echo "=== Backend describe ==="
+          kubectl describe deploy/backend -n cad-coder || true
+          echo "=== Frontend describe ==="
+          kubectl describe deploy/frontend -n cad-coder || true
+          echo "=== Recent backend pod events ==="
+          kubectl get events -n cad-coder --sort-by=.lastTimestamp | tail -n 50 || true
+          echo "=== Backend pod logs (most recent) ==="
+          kubectl logs -n cad-coder deploy/backend --tail=200 || true
+          echo "=== Frontend pod logs (most recent) ==="
+          kubectl logs -n cad-coder deploy/frontend --tail=200 || true
       
       - name: Verify deployment
         run: |

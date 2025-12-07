@@ -6,7 +6,7 @@ config:
   cad-coder-gcp:cluster_name: cad-coder-production
   cad-coder-gcp:environment: production
   # Standard nodes for backend/frontend (higher capacity)
-  cad-coder-gcp:node_count: "1" # from 3
+  cad-coder-gcp:node_count: "2" # from 3
   cad-coder-gcp:machine_type: e2-standard-2 # from -8
   # GPU nodes for inference
   cad-coder-gcp:gpu_node_count: "2"
