@@ -1,0 +1,7 @@
+name: cad-coder-mongodb
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: MongoDB Atlas infrastructure for CAD-Coder project
+

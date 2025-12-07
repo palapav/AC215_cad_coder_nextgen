@@ -1,0 +1,10 @@
+config:
+  cad-coder-mongodb:orgId: ""  # Set this with: pulumi config set orgId <your-org-id>
+  cad-coder-mongodb:projectName: cad-coder-nextgen
+  cad-coder-mongodb:clusterName: cad-coder-cluster-dev
+  cad-coder-mongodb:region: US_EAST_1
+  cad-coder-mongodb:instanceSize: M0  # Free tier
+  cad-coder-mongodb:dbUsername: cad-coder-user
+  cad-coder-mongodb:allowedIps:
+    - "0.0.0.0/0"  # Allow all IPs for development (restrict in production)
+
