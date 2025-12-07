@@ -9,7 +9,7 @@ metadata:
     app: cad-coder
     component: frontend
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: cad-coder
@@ -47,8 +47,8 @@ spec:
           
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
+              cpu: "50m" # Was 100m
+              memory: "64Mi" # Was 128Mi
             limits:
               cpu: "500m"
               memory: "512Mi"
@@ -109,8 +109,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: frontend
-  minReplicas: 2
-  maxReplicas: 6
+  minReplicas: 1
+  maxReplicas: 4
   metrics:
     - type: Resource
       resource:
@@ -134,7 +134,7 @@ metadata:
     app: cad-coder
     component: frontend
 spec:
-  minAvailable: 1
+  minAvailable: 0
   selector:
     matchLabels:
       app: cad-coder

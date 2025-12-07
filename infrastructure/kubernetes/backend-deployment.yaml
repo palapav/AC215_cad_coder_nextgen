@@ -9,7 +9,7 @@ metadata:
     app: cad-coder
     component: backend
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: cad-coder
@@ -63,17 +63,17 @@ spec:
           
           resources:
             requests:
-              cpu: "500m"
-              memory: "1Gi"
+              cpu: "250m" # was 500
+              memory: "512Mi" # was 1Gi
             limits:
-              cpu: "2"
-              memory: "4Gi"
+              cpu: "1"
+              memory: "2Gi" # Was 4Gi
           
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30 # Increased from 10
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
@@ -82,7 +82,7 @@ spec:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 15 # Increased from 5
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
@@ -144,8 +144,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: backend
-  minReplicas: 2
-  maxReplicas: 10
+  minReplicas: 1
+  maxReplicas: 5
   metrics:
     - type: Resource
       resource:
@@ -183,7 +183,7 @@ metadata:
     app: cad-coder
     component: backend
 spec:
-  minAvailable: 1
+  minAvailable: 0
   selector:
     matchLabels:
       app: cad-coder
