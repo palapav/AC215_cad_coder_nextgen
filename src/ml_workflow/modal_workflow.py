@@ -181,8 +181,10 @@ def run_preprocessing(
     gpu="A100",
     timeout=7200,
     volumes={"/models": model_volume},
-    # Note: Modal secrets are managed via `modal secret create` command
-    # secrets=[modal.Secret.from_name("modal-secret")],  # Uncomment if you have secrets
+    # WandB secret for experiment tracking
+    # Create with: modal secret create wandb-secret WANDB_API_KEY=your_api_key
+    # Note: If secret doesn't exist, create it first or remove this line temporarily
+    secrets=[modal.Secret.from_name("wandb-secret")],
 )
 def run_training(
     workflow_id: str,
@@ -286,15 +288,34 @@ def run_training(
     model_output_dir = os.path.join(output_dir, workflow_id)
     os.makedirs(model_output_dir, exist_ok=True)
     
-    # In production, this would call centralized_train.py with proper args
     # Pass max_samples if provided for testing
     if max_samples is not None:
         logger.info(f"🧪 TEST MODE: Limiting training to {max_samples} samples")
         training_config = training_config.copy()
         training_config["max_samples"] = max_samples
     
-    # For now, we'll mock the training process
-    # In actual implementation, would call: train_main() with args including max_samples
+    # Check if WandB is enabled and API key is available
+    log_to_wandb = training_config.get("log_to_wandb", False)
+    wandb_api_key = os.environ.get("WANDB_API_KEY")
+    
+    if log_to_wandb:
+        if wandb_api_key:
+            logger.info("📊 WandB logging enabled - training metrics will be tracked")
+            logger.info(f"   Project: {training_config.get('wandb_project', 'CAD-Coder-ML-Workflow')}")
+        else:
+            logger.warning("⚠️  WandB logging requested but WANDB_API_KEY not found. Create secret with: modal secret create wandb-secret WANDB_API_KEY=your_key")
+            logger.warning("   Continuing without WandB logging...")
+            training_config = training_config.copy()
+            training_config["log_to_wandb"] = False
+    
+    # TODO: In production, this would call the actual training code:
+    # from centralized_train import main as train_main
+    # train_main() with proper arguments including wandb config
+    # For now, we'll mock the training process to demonstrate the workflow
+    
+    logger.info("📝 Note: Training is currently mocked. To enable real training with WandB tracking:")
+    logger.info("   1. Set up WandB: See WANDB_GUIDE.md")
+    logger.info("   2. Implement actual training call in run_training() function")
     
     result = {
         "workflow_id": workflow_id,

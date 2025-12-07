@@ -19,6 +19,9 @@ TRAINING_CONFIG = {
     "checkpoint_steps": 1000,
     "eval_steps": 500,  # Evaluate every 500 steps
     "val_samples": 1000,  # Use 1000 validation samples
+    # WandB configuration for experiment tracking
+    "log_to_wandb": True,  # Enable WandB logging
+    "wandb_project": "CAD-Coder-ML-Workflow",  # WandB project name
 }
 
 # Evaluation configuration

@@ -15,6 +15,19 @@ pip install modal-client
 modal token new  # Authenticate with Modal
 ```
 
+### Optional: Set Up Weights & Biases (WandB) Tracking
+
+To track training runs in WandB:
+
+1. **Create WandB account**: Go to https://wandb.ai and sign up
+2. **Get API key**: https://wandb.ai/settings → API keys → Copy your key
+3. **Create Modal secret**:
+   ```bash
+   modal secret create wandb-secret WANDB_API_KEY=your_api_key_here
+   ```
+
+For detailed instructions, see **[WANDB_GUIDE.md](./WANDB_GUIDE.md)**
+
 ### Run the Workflow
 
 ```bash
