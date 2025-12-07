@@ -1,0 +1,15 @@
+# Pulumi Stack Configuration for Production Environment
+config:
+  gcp:project: cad-coder-nextgen
+  gcp:region: us-central1
+  gcp:zone: us-central1-a
+  cad-coder-gcp:cluster_name: cad-coder-production
+  cad-coder-gcp:environment: production
+  # Standard nodes for backend/frontend (higher capacity)
+  cad-coder-gcp:node_count: "1" # from 3
+  cad-coder-gcp:machine_type: e2-standard-2 # from -8
+  # GPU nodes for inference
+  cad-coder-gcp:gpu_node_count: "2"
+  cad-coder-gcp:gpu_machine_type: n1-standard-16
+  cad-coder-gcp:gpu_type: nvidia-tesla-t4
+  cad-coder-gcp:gpu_count: "1"

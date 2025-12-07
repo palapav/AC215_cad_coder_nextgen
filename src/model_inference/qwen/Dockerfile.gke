@@ -1,0 +1,51 @@
+# =============================================================================
+# Qwen Inference Service Dockerfile for GKE GPU Deployment
+# =============================================================================
+# This Dockerfile creates a production-ready inference service for the
+# fine-tuned Qwen3-VL model running on GKE with NVIDIA GPUs.
+
+# Base image with CUDA and PyTorch
+FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd -m -u 1000 inference && \
+    mkdir -p /app /models && \
+    chown -R inference:inference /app /models
+
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements-gke.txt /app/
+RUN pip install --no-cache-dir -r requirements-gke.txt
+
+# Copy inference code
+COPY model_utils.py /app/
+COPY inference_service.py /app/
+COPY gke_server.py /app/
+
+# Switch to non-root user
+USER inference
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the inference server
+CMD ["python", "gke_server.py"]

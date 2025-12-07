@@ -395,8 +395,35 @@ jobs:
             python scripts/aggregate_coverage.py \
               --threshold 0.50 \
               --ignore-missing \
-              $COVERAGE_FILES
+              "$COVERAGE_FILES"
           else
             echo "Warning: No coverage files found to aggregate"
             exit 0
           fi
+
+  # ============================================================================
+  # TRIGGER DEPLOYMENT (on main branch only)
+  # ============================================================================
+  trigger-deploy:
+    name: Trigger Deployment
+    runs-on: ubuntu-latest
+    needs: [coverage-summary, e2e-tests, docker-build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Trigger deployment workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy.yml',
+              ref: 'main',
+              inputs: {
+                environment: 'production',
+                deploy_infrastructure: 'false',
+                deploy_models: 'false'
+              }
+            });
+            console.log('Deployment workflow triggered for staging environment');

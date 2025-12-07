@@ -1,0 +1,55 @@
+# =============================================================================
+# LLaVA Inference Service Dockerfile for GKE GPU Deployment
+# =============================================================================
+# This Dockerfile creates a production-ready inference service for the
+# CAD-Coder LLaVA model running on GKE with A100 GPUs.
+
+# Base image with CUDA and PyTorch (LLaVA requires specific versions)
+FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    HF_HOME=/models/hf_cache \
+    TRANSFORMERS_CACHE=/models/hf_cache
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd -m -u 1000 inference && \
+    mkdir -p /app /models/hf_cache && \
+    chown -R inference:inference /app /models
+
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements-gke.txt /app/
+RUN pip install --no-cache-dir -r requirements-gke.txt
+
+# Copy LLaVA module from parent directory
+COPY --chown=inference:inference ../llava /app/llava/
+
+# Copy inference code
+COPY --chown=inference:inference preprocessing.py /app/
+COPY --chown=inference:inference gke_server.py /app/
+
+# Switch to non-root user
+USER inference
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=600s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the inference server
+CMD ["python", "gke_server.py"]

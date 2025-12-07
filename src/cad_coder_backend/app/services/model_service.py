@@ -1,4 +1,4 @@
-"""Model service for CAD code generation using Modal-hosted models (Qwen and LLaVA)."""
+"""Model service for CAD code generation using Modal or GKE-hosted models (Qwen and LLaVA)."""
 import asyncio
 import logging
 import os
@@ -21,102 +21,182 @@ class ModelChoice(Enum):
 
 
 # ---------------------------------------------------------------------------
-# Modal Configuration
+# Backend Configuration
 # ---------------------------------------------------------------------------
 
-# Qwen Modal configuration
+# Supported backends: "modal", "gke", "mock"
 QWEN_INFERENCE_BACKEND = os.getenv("QWEN_INFERENCE_BACKEND", "modal").lower()
-_qwen_modal_enabled = QWEN_INFERENCE_BACKEND == "modal"
-_qwen_modal_init_error = None
-
-# LLaVA Modal configuration
 LLAVA_INFERENCE_BACKEND = os.getenv("LLAVA_INFERENCE_BACKEND", "modal").lower()
-_llava_modal_enabled = LLAVA_INFERENCE_BACKEND == "modal"
-_llava_modal_init_error = None
 
-# Import Modal clients
-if _qwen_modal_enabled:
+# Initialize backend clients based on configuration
+_qwen_backend_enabled = False
+_qwen_backend_init_error = None
+_llava_backend_enabled = False
+_llava_backend_init_error = None
+
+# ---------------------------------------------------------------------------
+# Modal Backend Initialization
+# ---------------------------------------------------------------------------
+
+if QWEN_INFERENCE_BACKEND == "modal":
     try:
         logger.info("Loading Modal client for Qwen inference")
         from app.services.modal_client import run_modal_qwen_inference, ModalConfigError
+        _qwen_backend_enabled = True
     except Exception as exc:
-        _qwen_modal_init_error = exc
-        _qwen_modal_enabled = False
+        _qwen_backend_init_error = exc
         logger.warning("[Model Service] Qwen Modal client disabled: %s", exc)
 
-if _llava_modal_enabled:
+if LLAVA_INFERENCE_BACKEND == "modal":
     try:
         logger.info("Loading Modal client for LLaVA inference")
         from app.services.modal_client import run_modal_llava_inference, ModalConfigError
+        _llava_backend_enabled = True
     except Exception as exc:
-        _llava_modal_init_error = exc
-        _llava_modal_enabled = False
+        _llava_backend_init_error = exc
         logger.warning("[Model Service] LLaVA Modal client disabled: %s", exc)
 
+# ---------------------------------------------------------------------------
+# GKE Backend Initialization
+# ---------------------------------------------------------------------------
+
+if QWEN_INFERENCE_BACKEND == "gke":
+    try:
+        logger.info("Loading GKE client for Qwen inference")
+        from app.services.gke_client import run_gke_qwen_inference, GKEClientError
+        _qwen_backend_enabled = True
+    except Exception as exc:
+        _qwen_backend_init_error = exc
+        logger.warning("[Model Service] Qwen GKE client disabled: %s", exc)
+
+if LLAVA_INFERENCE_BACKEND == "gke":
+    try:
+        logger.info("Loading GKE client for LLaVA inference")
+        from app.services.gke_client import run_gke_llava_inference, GKEClientError
+        _llava_backend_enabled = True
+    except Exception as exc:
+        _llava_backend_init_error = exc
+        logger.warning("[Model Service] LLaVA GKE client disabled: %s", exc)
 
 # ---------------------------------------------------------------------------
-# Qwen Inference via Modal
+# Mock Backend (for testing)
 # ---------------------------------------------------------------------------
 
-async def _run_qwen_via_modal(prompt: str, image=None) -> str:
-    """Run Qwen inference via Modal GPU worker."""
-    if not _qwen_modal_enabled:
+if QWEN_INFERENCE_BACKEND == "mock":
+    _qwen_backend_enabled = True
+    logger.info("Using mock backend for Qwen inference")
+
+if LLAVA_INFERENCE_BACKEND == "mock":
+    _llava_backend_enabled = True
+    logger.info("Using mock backend for LLaVA inference")
+
+
+# ---------------------------------------------------------------------------
+# Service Initialization (for backward compatibility)
+# ---------------------------------------------------------------------------
+
+def _get_qwen_service():
+    """Get Qwen service status (for startup pre-initialization)."""
+    return {
+        "backend": QWEN_INFERENCE_BACKEND,
+        "enabled": _qwen_backend_enabled,
+        "error": str(_qwen_backend_init_error) if _qwen_backend_init_error else None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Qwen Inference
+# ---------------------------------------------------------------------------
+
+async def _run_qwen_inference(prompt: str, image=None) -> str:
+    """Run Qwen inference via configured backend."""
+    if not _qwen_backend_enabled:
         raise RuntimeError(
-            "Modal backend disabled but Qwen model requested. "
-            "Set QWEN_INFERENCE_BACKEND=modal and configure Modal tokens."
+            f"Qwen backend ({QWEN_INFERENCE_BACKEND}) is not enabled. "
+            "Check configuration and credentials."
         )
-    if _qwen_modal_init_error:
-        raise RuntimeError(f"Qwen Modal client disabled: {_qwen_modal_init_error}")
+    if _qwen_backend_init_error:
+        raise RuntimeError(f"Qwen backend initialization failed: {_qwen_backend_init_error}")
 
     max_tokens = int(os.getenv("QWEN_MODAL_MAX_NEW_TOKENS", "2048") or 2048)
-    modal_temperature = float(os.getenv("QWEN_MODAL_TEMPERATURE", "0.0") or 0.0)
-    
-    try:
+    temperature = float(os.getenv("QWEN_MODAL_TEMPERATURE", "0.0") or 0.0)
+
+    # Route to appropriate backend
+    if QWEN_INFERENCE_BACKEND == "modal":
+        from app.services.modal_client import run_modal_qwen_inference
         return await run_modal_qwen_inference(
             prompt=prompt,
             image=image,
             max_new_tokens=max_tokens,
-            temperature=modal_temperature,
+            temperature=temperature,
         )
-    except Exception as exc:
-        raise RuntimeError(f"Qwen Modal inference failed: {exc}") from exc
-
-
-# ---------------------------------------------------------------------------
-# LLaVA Inference via Modal
-# ---------------------------------------------------------------------------
-
-async def _run_llava_via_modal(prompt: str, image=None) -> str:
-    """Run LLaVA inference via Modal GPU worker."""
-    if not _llava_modal_enabled:
-        raise RuntimeError(
-            "Modal backend disabled but LLaVA model requested. "
-            "Set LLAVA_INFERENCE_BACKEND=modal and configure Modal tokens."
-        )
-    if _llava_modal_init_error:
-        raise RuntimeError(f"LLaVA Modal client disabled: {_llava_modal_init_error}")
     
-    if image is None:
-        raise ValueError("LLaVA CAD-Coder requires an image input for inference.")
+    elif QWEN_INFERENCE_BACKEND == "gke":
+        from app.services.gke_client import run_gke_qwen_inference
+        return await run_gke_qwen_inference(
+            prompt=prompt,
+            image=image,
+            max_new_tokens=max_tokens,
+            temperature=temperature,
+        )
+    
+    elif QWEN_INFERENCE_BACKEND == "mock":
+        await asyncio.sleep(0.1)  # Simulate latency
+        return _qwen_placeholder()
+    
+    else:
+        raise RuntimeError(f"Unknown Qwen backend: {QWEN_INFERENCE_BACKEND}")
+
+
+# ---------------------------------------------------------------------------
+# LLaVA Inference
+# ---------------------------------------------------------------------------
+
+async def _run_llava_inference(prompt: str, image=None) -> str:
+    """Run LLaVA inference via configured backend."""
+    if not _llava_backend_enabled:
+        raise RuntimeError(
+            f"LLaVA backend ({LLAVA_INFERENCE_BACKEND}) is not enabled. "
+            "Check configuration and credentials."
+        )
+    if _llava_backend_init_error:
+        raise RuntimeError(f"LLaVA backend initialization failed: {_llava_backend_init_error}")
 
     max_tokens = int(os.getenv("LLAVA_MODAL_MAX_NEW_TOKENS", "3450") or 3450)
-    modal_temperature = float(os.getenv("LLAVA_MODAL_TEMPERATURE", "0.0") or 0.0)
+    temperature = float(os.getenv("LLAVA_MODAL_TEMPERATURE", "0.0") or 0.0)
     top_p = float(os.getenv("LLAVA_MODAL_TOP_P", "1.0") or 1.0)
-    
-    try:
+
+    # Route to appropriate backend
+    if LLAVA_INFERENCE_BACKEND == "modal":
+        from app.services.modal_client import run_modal_llava_inference
         return await run_modal_llava_inference(
             prompt=prompt,
             image=image,
             max_new_tokens=max_tokens,
-            temperature=modal_temperature,
+            temperature=temperature,
             top_p=top_p,
         )
-    except Exception as exc:
-        raise RuntimeError(f"LLaVA Modal inference failed: {exc}") from exc
+    
+    elif LLAVA_INFERENCE_BACKEND == "gke":
+        from app.services.gke_client import run_gke_llava_inference
+        return await run_gke_llava_inference(
+            prompt=prompt,
+            image=image,
+            max_new_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+        )
+    
+    elif LLAVA_INFERENCE_BACKEND == "mock":
+        await asyncio.sleep(0.1)  # Simulate latency
+        return _llava_placeholder()
+    
+    else:
+        raise RuntimeError(f"Unknown LLaVA backend: {LLAVA_INFERENCE_BACKEND}")
 
 
 # ---------------------------------------------------------------------------
-# Placeholder responses (fallback when Modal is not available)
+# Placeholder responses (fallback when backend is not available)
 # ---------------------------------------------------------------------------
 
 def _llava_placeholder() -> str:
@@ -192,7 +272,7 @@ async def generate_cad_code(
             )
 
         try:
-            cad_text = await _run_qwen_via_modal(prompt=prompt_for_model, image=image)
+            cad_text = await _run_qwen_inference(prompt=prompt_for_model, image=image)
         except RuntimeError as exc:
             # RuntimeError indicates backend misconfiguration - propagate it
             logger.error("[Model Service] Qwen inference failed: %s", exc)
@@ -224,7 +304,7 @@ async def generate_cad_code(
             actual_image = Image.new("RGB", (336, 336), color=(0, 0, 0))
 
         try:
-            cad_text = await _run_llava_via_modal(prompt=prompt, image=actual_image)
+            cad_text = await _run_llava_inference(prompt=prompt, image=actual_image)
         except RuntimeError as exc:
             # RuntimeError indicates backend misconfiguration - propagate it
             logger.error("[Model Service] LLaVA inference failed: %s", exc)

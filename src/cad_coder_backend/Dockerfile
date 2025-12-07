@@ -1,5 +1,5 @@
 # ---------- Base Image ----------
-# Using Python slim image - no PyTorch/CUDA needed since model inference runs on Modal
+# Using Python slim image - no PyTorch/CUDA needed since model inference runs on Modal/GKE
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -12,17 +12,17 @@ RUN apt-get update && apt-get install -y \
 # ---------- Working Directory ----------
 WORKDIR /app
 
-# ---------- Copy Project ----------
+# ---------- Install uv (modern resolver/installer) ----------
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir uv
+
+# ---------- Copy lockfiles first for better caching ----------
+COPY pyproject.toml uv.lock* ./
+
+# Install dependencies (prefers uv.lock; falls back to resolve if lock missing)
+RUN uv sync --no-dev --no-editable --compile-bytecode
+
+# ---------- Copy Project Source ----------
 COPY . .
-
-# ---------- Install Dependencies ----------
-RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
-
-# ---------- Environment ----------
-# Load Google Cloud credentials
-#COPY secrets/data-service-account.json /app/secrets/data-service-account.json
-#ENV GOOGLE_APPLICATION_CREDENTIALS="/app/secrets/data-service-account.json"
 
 # Expose FastAPI port
 EXPOSE 8000

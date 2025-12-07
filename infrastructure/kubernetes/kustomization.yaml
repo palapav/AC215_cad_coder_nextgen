@@ -1,0 +1,44 @@
+# Kustomize configuration for CAD-Coder Kubernetes resources
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cad-coder
+
+# Common labels applied to all resources
+commonLabels:
+  app: cad-coder
+  managed-by: kustomize
+
+# Resources to include
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - backend-deployment.yaml
+  - frontend-deployment.yaml
+  - qwen-inference-deployment.yaml
+  - llava-inference-deployment.yaml
+  - ingress.yaml
+  - gcp-backendconfig-cert.yaml
+
+# ConfigMap generator for dynamic configuration
+configMapGenerator:
+  - name: cad-coder-dynamic-config
+    literals:
+      - DEPLOYMENT_TIME=${DEPLOYMENT_TIME:-unknown}
+      - GIT_COMMIT=${GIT_COMMIT:-unknown}
+
+# Image transformations (override at deploy time)
+images:
+  - name: cad-coder-backend
+    newName: ${ARTIFACT_REGISTRY}/cad-coder-backend
+    newTag: latest
+  - name: cad-coder-frontend
+    newName: ${ARTIFACT_REGISTRY}/cad-coder-frontend
+    newTag: latest
+  - name: cad-coder-qwen-inference
+    newName: ${ARTIFACT_REGISTRY}/cad-coder-qwen-inference
+    newTag: latest
+  - name: cad-coder-llava-inference
+    newName: ${ARTIFACT_REGISTRY}/cad-coder-llava-inference
+    newTag: latest

@@ -1,0 +1,61 @@
+---
+# ConfigMap for CAD-Coder application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cad-coder-config
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+data:
+  # Backend Configuration
+  FRONTEND_ORIGIN: "https://cad-coder.example.com"
+  LOG_LEVEL: "INFO"
+  
+  # Inference Backend Selection (gke for GKE deployment)
+  QWEN_INFERENCE_BACKEND: "gke"
+  LLAVA_INFERENCE_BACKEND: "gke"
+  
+  # Qwen Service Configuration
+  QWEN_SERVICE_URL: "http://qwen-inference:8080"
+  QWEN_MODAL_MAX_NEW_TOKENS: "4096"
+  QWEN_MODAL_TEMPERATURE: "0.0"
+  
+  # LLaVA Service Configuration
+  LLAVA_SERVICE_URL: "http://llava-inference:8080"
+  LLAVA_MODAL_MAX_NEW_TOKENS: "3450"
+  LLAVA_MODAL_TEMPERATURE: "0.0"
+  LLAVA_MODAL_TOP_P: "1.0"
+  
+  # RAG Configuration
+  ENABLE_RAG: "true"
+  RAG_PROJECT_ID: "cad-coder-nextgen"
+  RAG_LOCATION: "us-central1"
+  RAG_INDEX_NAME: "cadcoder-mm-index"
+  RAG_ENDPOINT_NAME: "cadcoder-mm-endpoint"
+  
+  # MongoDB Configuration
+  MONGO_DB: "cad_coder"
+---
+# ConfigMap for model inference configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inference-config
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: inference
+data:
+  # Qwen Model Configuration
+  QWEN_BASE_MODEL: "Qwen/Qwen3-VL-2B-Instruct"
+  QWEN_CHECKPOINT_PATH: "/models/qwen/final_model.pt"
+  
+  # LLaVA Model Configuration
+  LLAVA_HF_MODEL: "CADCODER/CAD-Coder"
+  LLAVA_CONV_MODE: "vicuna_v1"
+  
+  # Inference Server Configuration
+  MAX_BATCH_SIZE: "4"
+  MAX_QUEUE_SIZE: "100"
+  REQUEST_TIMEOUT: "300"

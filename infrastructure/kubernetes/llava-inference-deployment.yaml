@@ -1,0 +1,223 @@
+---
+# LLaVA Model Inference Deployment (A100 GPU)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llava-inference
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: llava-inference
+    gpu: "a100"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cad-coder
+      component: llava-inference
+  template:
+    metadata:
+      labels:
+        app: cad-coder
+        component: llava-inference
+        gpu: "a100"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: cad-coder-inference
+      
+      # Schedule on A100 GPU nodes
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-a100
+      
+      # Tolerate A100 GPU taints
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Equal
+          value: a100
+          effect: NoSchedule
+      
+      containers:
+        - name: llava-inference
+          image: ${ARTIFACT_REGISTRY}/cad-coder-llava-inference:latest
+          imagePullPolicy: Always
+          
+          ports:
+            - containerPort: 8080
+              name: http
+          
+          envFrom:
+            - configMapRef:
+                name: inference-config
+            - secretRef:
+                name: cad-coder-secrets
+          
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+            - name: HF_HOME
+              value: "/models/hf_cache"
+            - name: TRANSFORMERS_CACHE
+              value: "/models/hf_cache"
+            - name: LLAVA_HF_MODEL
+              value: "CADCODER/CAD-Coder"
+            - name: LLAVA_CONV_MODE
+              value: "vicuna_v1"
+          
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+            - name: shm
+              mountPath: /dev/shm
+          
+          resources:
+            requests:
+              cpu: "4"
+              memory: "32Gi"
+              nvidia.com/gpu: 1
+            limits:
+              cpu: "12"
+              memory: "48Gi"
+              nvidia.com/gpu: 1
+          
+          # Long startup probe for large model loading (~26GB)
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 40  # 10 minutes total for model download/loading
+          
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: llava-model-cache
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "16Gi"
+      
+      terminationGracePeriodSeconds: 120
+---
+# LLaVA Inference Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: llava-inference
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: llava-inference
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: cad-coder
+    component: llava-inference
+---
+# Persistent Volume Claim for LLaVA Model Cache
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llava-model-cache
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: llava-inference
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard-rwo
+  resources:
+    requests:
+      storage: 100Gi  # LLaVA 13B is ~26GB
+---
+# Horizontal Pod Autoscaler for LLaVA Inference (GPU-aware)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llava-inference-hpa
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: llava-inference
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llava-inference
+  minReplicas: 0  # Scale to zero when not needed (A100s are expensive)
+  maxReplicas: 3
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: nvidia_gpu_duty_cycle
+        target:
+          type: AverageValue
+          averageValue: "70"
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 900  # 15 min window to avoid frequent scaling
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+---
+# KEDA ScaledObject for request-based autoscaling (alternative to HPA)
+# Uncomment if using KEDA for more advanced scaling based on queue length
+# apiVersion: keda.sh/v1alpha1
+# kind: ScaledObject
+# metadata:
+#   name: llava-inference-scaler
+#   namespace: cad-coder
+# spec:
+#   scaleTargetRef:
+#     name: llava-inference
+#   minReplicaCount: 0
+#   maxReplicaCount: 3
+#   cooldownPeriod: 300
+#   triggers:
+#     - type: prometheus
+#       metadata:
+#         serverAddress: http://prometheus.monitoring:9090
+#         metricName: http_requests_pending
+#         query: sum(rate(http_requests_total{service="llava-inference"}[1m]))
+#         threshold: "5"

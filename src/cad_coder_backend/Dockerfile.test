@@ -11,14 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for caching
-COPY requirements.txt .
-COPY requirements-test.txt .
-
-# Install dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -r requirements-test.txt
+# Install uv and sync deps (dev extras for tests)
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir uv
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --dev --no-editable --compile-bytecode
 
 # Copy source code
 COPY . .

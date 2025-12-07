@@ -1,0 +1,246 @@
+---
+# Qwen Model Inference Deployment (GPU)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwen-inference
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: qwen-inference
+    gpu: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cad-coder
+      component: qwen-inference
+  template:
+    metadata:
+      labels:
+        app: cad-coder
+        component: qwen-inference
+        gpu: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: cad-coder-inference
+      
+      # Schedule on GPU nodes
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4
+      
+      # Tolerate GPU taints
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Equal
+          value: present
+          effect: NoSchedule
+      
+      # Init container to download model from GCS if not cached
+      initContainers:
+        - name: model-loader
+          image: google/cloud-sdk:slim
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              if [ ! -f /models/qwen/final_model.pt ]; then
+                echo "Downloading Qwen model checkpoint..."
+                gsutil -m cp -r gs://${MODEL_BUCKET}/qwen/* /models/qwen/
+                echo "Model download complete"
+              else
+                echo "Model already cached, skipping download"
+              fi
+          env:
+            - name: MODEL_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: inference-config
+                  key: MODEL_BUCKET
+                  optional: true
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+      
+      containers:
+        - name: qwen-inference
+          image: ${ARTIFACT_REGISTRY}/cad-coder-qwen-inference:latest
+          imagePullPolicy: Always
+          
+          ports:
+            - containerPort: 8080
+              name: http
+          
+          envFrom:
+            - configMapRef:
+                name: inference-config
+          
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+            - name: MODEL_PATH
+              value: "/models/qwen"
+            - name: CHECKPOINT_PATH
+              value: "/models/qwen/final_model.pt"
+            - name: HF_HOME
+              value: "/models/hf_cache"
+          
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+            - name: shm
+              mountPath: /dev/shm
+          
+          resources:
+            requests:
+              cpu: "2"
+              memory: "16Gi"
+              nvidia.com/gpu: 1
+            limits:
+              cpu: "8"
+              memory: "24Gi"
+              nvidia.com/gpu: 1
+          
+          # Startup probe with long timeout for model loading
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30  # 5 minutes total for model loading
+          
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: qwen-model-cache
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "8Gi"
+      
+      terminationGracePeriodSeconds: 60
+---
+# Qwen Inference Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen-inference
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: qwen-inference
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: cad-coder
+    component: qwen-inference
+---
+# Persistent Volume Claim for Qwen Model Cache
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qwen-model-cache
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: qwen-inference
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard-rwo
+  resources:
+    requests:
+      storage: 50Gi
+---
+# ServiceAccount for Inference
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cad-coder-inference
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: inference
+  annotations:
+    iam.gke.io/gcp-service-account: cad-coder-inference@${PROJECT_ID}.iam.gserviceaccount.com
+---
+# Horizontal Pod Autoscaler for Qwen Inference (GPU-aware)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: qwen-inference-hpa
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: qwen-inference
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: qwen-inference
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    # Scale based on GPU utilization (requires NVIDIA DCGM exporter)
+    - type: Pods
+      pods:
+        metric:
+          name: nvidia_gpu_duty_cycle
+        target:
+          type: AverageValue
+          averageValue: "70"
+    # Fallback to CPU if GPU metrics unavailable
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600  # Longer window for GPU pods
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
