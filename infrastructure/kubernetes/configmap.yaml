@@ -13,8 +13,8 @@ data:
   LOG_LEVEL: "INFO"
   
   # Inference Backend Selection (gke for GKE deployment)
-  QWEN_INFERENCE_BACKEND: "gke"
-  LLAVA_INFERENCE_BACKEND: "gke"
+  QWEN_INFERENCE_BACKEND: "mock"
+  LLAVA_INFERENCE_BACKEND: "mock"
   
   # Qwen Service Configuration
   QWEN_SERVICE_URL: "http://qwen-inference:8080"
@@ -28,7 +28,7 @@ data:
   LLAVA_MODAL_TOP_P: "1.0"
   
   # RAG Configuration
-  ENABLE_RAG: "true"
+  ENABLE_RAG: "false"
   RAG_PROJECT_ID: "cad-coder-nextgen"
   RAG_LOCATION: "us-central1"
   RAG_INDEX_NAME: "cadcoder-mm-index"
