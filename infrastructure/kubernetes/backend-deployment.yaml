@@ -65,7 +65,7 @@ spec:
           
           livenessProbe:
             httpGet:
-              path: /health
+              path: /api/health
               port: 8000
             initialDelaySeconds: 30 # Increased from 10
             periodSeconds: 30
@@ -74,7 +74,7 @@ spec:
           
           readinessProbe:
             httpGet:
-              path: /health
+              path: /api/health
               port: 8000
             initialDelaySeconds: 15 # Increased from 5
             periodSeconds: 10
