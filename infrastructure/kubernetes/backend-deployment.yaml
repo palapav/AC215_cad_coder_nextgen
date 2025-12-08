@@ -42,7 +42,7 @@ spec:
       
       containers:
         - name: backend
-          image: ${ARTIFACT_REGISTRY}/cad-coder-backend:latest
+          image: us-central1-docker.pkg.dev/cad-coder-nextgen/cad-coder-production/cad-coder-backend:latest
           imagePullPolicy: Always
           
           ports:
@@ -95,6 +95,8 @@ metadata:
   labels:
     app: cad-coder
     component: backend
+  annotations:
+    cloud.google.com/backend-config: '{"default": "cad-coder-backend-config"}'
 spec:
   type: ClusterIP
   ports:

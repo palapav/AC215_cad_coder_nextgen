@@ -37,7 +37,7 @@ spec:
       
       containers:
         - name: frontend
-          image: ${ARTIFACT_REGISTRY}/cad-coder-frontend:latest
+          image: us-central1-docker.pkg.dev/cad-coder-nextgen/cad-coder-production/cad-coder-frontend:latest
           imagePullPolicy: Always
           
           ports:
