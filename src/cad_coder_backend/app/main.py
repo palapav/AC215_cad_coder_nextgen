@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
@@ -45,12 +45,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- Include Routers ----------
-app.include_router(generate.router)
-app.include_router(history.router)
-app.include_router(health.router)
-#app.include_router(auth.router) # skip auth for now
-app.include_router(pipeline.router)
+# ---------- Include Routers with /api prefix ----------
+api_router = APIRouter(prefix="/api")
+api_router.include_router(generate.router)
+api_router.include_router(history.router)
+api_router.include_router(health.router)
+#api_router.include_router(auth.router) # skip auth for now
+api_router.include_router(pipeline.router)
+
+app.include_router(api_router)
 
 # ---------- Root Endpoint ----------
 @app.get("/")
