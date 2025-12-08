@@ -201,7 +201,7 @@ jobs:
       url: https://cad-coder.example.com
     
     env:
-      ARTIFACT_REGISTRY: ${{ needs.build-images.outputs.artifact_registry }}
+      ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cad-coder-production
       IMAGE_TAG: ${{ needs.build-images.outputs.image_tag }}
     
     steps:

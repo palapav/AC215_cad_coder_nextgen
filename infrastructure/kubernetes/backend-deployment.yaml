@@ -55,15 +55,6 @@ spec:
             - secretRef:
                 name: cad-coder-secrets
           
-          env:
-            - name: GOOGLE_APPLICATION_CREDENTIALS
-              value: "/app/datapipeline/key.json"
-          
-          volumeMounts:
-            - name: gcp-credentials
-              mountPath: /app/datapipeline
-              readOnly: true
-          
           resources:
             requests:
               cpu: "250m" # was 500
@@ -94,11 +85,6 @@ spec:
             readOnlyRootFilesystem: false
             runAsNonRoot: true
             runAsUser: 1000
-      
-      volumes:
-        - name: gcp-credentials
-          secret:
-            secretName: gcp-credentials
 ---
 # Backend Service
 apiVersion: v1
