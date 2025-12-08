@@ -167,7 +167,10 @@ export function AIModelSandbox() {
       console.log("[Frontend] Normalized model:", normalizedModel);
       console.log("[Frontend] Request body:", requestBody);
       
-      const response = await fetch("http://localhost:8000/generate_cad", {
+      // Use relative URL to work with the ingress routing in production
+      // In production, /api/* routes to the backend service
+      const apiUrl = import.meta.env.VITE_API_URL || "/api";
+      const response = await fetch(`${apiUrl}/generate_cad`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),

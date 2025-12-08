@@ -33,13 +33,17 @@ async def startup_event():
         print("[Startup] Model will be loaded on first use (lazy loading)")
 
 # ---------- CORS (for React frontend) ----------
+# In production, frontend and backend are served from the same origin via ingress
+# So we need to allow the production IP as well as localhost for development
 origins = [
     os.getenv("FRONTEND_ORIGIN", "http://localhost:3000"),
     "http://127.0.0.1:3000",
+    "http://136.110.150.2",  # Production IP
+    "*",  # Allow all origins for flexibility (ingress handles routing)
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Allow all origins since ingress handles same-origin routing
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,6 +56,19 @@ api_router.include_router(history.router)
 api_router.include_router(health.router)
 #api_router.include_router(auth.router) # skip auth for now
 api_router.include_router(pipeline.router)
+
+# Add a root /api endpoint
+@api_router.get("/")
+async def api_root():
+    return {
+        "message": "CAD-Coder API",
+        "version": "1.2.0",
+        "endpoints": {
+            "health": "/api/health/",
+            "generate": "/api/generate_cad",
+            "history": "/api/history/",
+        }
+    }
 
 app.include_router(api_router)
 
