@@ -10,50 +10,16 @@ metadata:
   annotations:
     # Use GCE Ingress
     kubernetes.io/ingress.class: "gce"
-    
-    # Enable HTTPS redirect
-    kubernetes.io/ingress.allow-http: "false"
-    
+    # Allow HTTP (no TLS/managed cert for IP-only access)
+    kubernetes.io/ingress.allow-http: "true"
     # Backend service health check configuration
     cloud.google.com/backend-config: '{"default": "cad-coder-backend-config"}'
-    
-    # Managed SSL certificate
-    networking.gke.io/managed-certificates: "cad-coder-cert"
-    
-    # Static IP address (must be created separately)
+    # Static IP address (already created)
     kubernetes.io/ingress.global-static-ip-name: "cad-coder-ip"
 spec:
-  tls:
-    - secretName: cad-coder-tls
-      hosts:
-        - cad-coder.example.com
-        - api.cad-coder.example.com
   rules:
-    # Frontend
-    - host: cad-coder.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: frontend
-                port:
-                  number: 80
-    # Backend API
-    - host: api.cad-coder.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 8000
-    # Combined: frontend with API on /api path
-    - host: cad-coder.example.com
-      http:
+    # Hostless (catch-all) rules for IP-only access
+    - http:
         paths:
           - path: /api
             pathType: Prefix

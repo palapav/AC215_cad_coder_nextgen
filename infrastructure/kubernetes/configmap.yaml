@@ -9,7 +9,7 @@ metadata:
     app: cad-coder
 data:
   # Backend Configuration
-  FRONTEND_ORIGIN: "https://cad-coder.example.com"
+  FRONTEND_ORIGIN: "http://136.110.150.2"
   LOG_LEVEL: "INFO"
   
   # Inference Backend Selection (gke for GKE deployment)
