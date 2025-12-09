@@ -1,4 +1,6 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+import asyncio
 from app.models.cad_input import CADInput
 from app.models.cad_output import CADOutput
 from app.services.model_service import generate_cad_code
@@ -97,4 +99,31 @@ async def generate_cad(input_data: CADInput):
         error_trace = traceback.format_exc()
         print(f'[Generate] Error: {str(e)}')
         print(f'[Generate] Traceback:\n{error_trace}')
+        raise HTTPException(status_code=500, detail=f"CAD generation failed: {str(e)}")
+
+
+@router.post("/generate_cad_stream")
+async def generate_cad_stream(input_data: CADInput):
+    try:
+        model_response = await generate_cad_code(
+            prompt=(input_data.prompt or "Generate the CADQuery code for the provided image."),
+            image=input_data.image_path,
+            model_choice=input_data.model_choice,
+            uid=input_data.user_id,
+            image_reference=input_data.image_path,
+        )
+
+        cad_code = model_response.get("cad_code") or ""
+
+        async def streamer():
+            for chunk in cad_code.split():
+                yield chunk + " "
+                await asyncio.sleep(0)
+
+        return StreamingResponse(streamer(), media_type="text/plain")
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f'[Generate Stream] Error: {str(e)}')
+        print(f'[Generate Stream] Traceback:\n{error_trace}')
         raise HTTPException(status_code=500, detail=f"CAD generation failed: {str(e)}")

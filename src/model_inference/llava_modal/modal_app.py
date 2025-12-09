@@ -26,6 +26,7 @@ longer (~5-10 minutes) to download the ~26GB model, but subsequent calls will be
 from __future__ import annotations
 
 import io
+import time
 import os
 from pathlib import Path
 from typing import Optional
@@ -72,12 +73,13 @@ def _ignore_runtime_file(path: Path) -> bool:
 
 
 llava_image = (
-    modal.Image.from_registry("pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime", add_python="3.10")
+    modal.Image.from_registry("pytorch/pytorch:2.1.2-cuda12.1-cudnn8-devel", add_python="3.10")
     .run_commands("pip install --upgrade pip")
+    .run_commands("apt-get update && apt-get install -y git && apt-get clean")
     .pip_install(
         # Core ML dependencies
-        "torch==2.1.2",
-        "torchvision==0.16.2",
+        "torch==2.2.2",
+        "torchvision==0.17.2",
         "transformers==4.37.2",
         "tokenizers==0.15.1",
         "sentencepiece==0.1.99",
@@ -95,6 +97,13 @@ llava_image = (
         "pydantic",
         "requests",
         "httpx==0.24.0",
+        "packaging",
+        "setuptools",
+        "wheel",
+        "ninja",
+    )
+    .run_commands(
+        "pip install --no-build-isolation --no-cache-dir flash-attn==2.5.8"
     )
     .add_local_dir(
         LOCAL_LLAVA_DIR,
@@ -107,6 +116,9 @@ llava_image = (
         "HF_HOME": "/model_cache",
         "TRANSFORMERS_CACHE": "/model_cache",
         "HF_HUB_CACHE": "/model_cache/hub",
+        "CUDA_HOME": "/usr/local/cuda",
+        "MAX_JOBS": "1",
+        "TORCH_CUDA_ARCH_LIST": "90",
     })
 )
 
@@ -158,6 +170,7 @@ def _initialize_llava_model():
         model_name=model_name,
         load_8bit=False,
         load_4bit=False,
+        use_flash_attn=True,
     )
     
     # Cache the model state
@@ -178,7 +191,7 @@ def _initialize_llava_model():
 
 @app.function(
     image=llava_image,
-    gpu="A100",  # LLaVA 13B requires ~26GB VRAM
+    gpu="H100",
     timeout=900,
     scaledown_window=600,
     min_containers=1,
@@ -254,6 +267,7 @@ def llava_modal_infer(
     ).unsqueeze(0).cuda()
     
     # Generate
+    start_time = time.time()
     with torch.inference_mode():
         output_ids = model.generate(
             input_ids,
@@ -265,10 +279,17 @@ def llava_modal_infer(
             max_new_tokens=max_new_tokens,
             use_cache=True,
         )
+    duration = time.time() - start_time
+    try:
+        gen_tokens = int(output_ids.shape[-1]) - int(input_ids.shape[-1])
+        tps = gen_tokens / duration if duration > 0 else 0.0
+        print(f"[LLaVA Modal] Generation time: {duration:.2f}s, tokens: {gen_tokens}, tps: {tps:.2f}")
+    except Exception:
+        pass
     
     # Decode output
     outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
-    
+
     return outputs
 
 
@@ -304,4 +325,3 @@ def main(
     )
     print("------ CAD-Coder LLaVA (Modal) Output ------")
     print(result)
-

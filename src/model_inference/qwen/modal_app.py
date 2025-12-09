@@ -59,7 +59,7 @@ def _ignore_runtime_file(path: Path) -> bool:
 
 
 qwen_image = (
-    modal.Image.from_registry("pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime", add_python="3.11")
+    modal.Image.from_registry("pytorch/pytorch:2.6.0-cuda12.4-cudnn9-devel", add_python="3.11")
     .run_commands("pip install --upgrade pip")
     .pip_install(
         "transformers==4.57.1",
@@ -70,14 +70,18 @@ qwen_image = (
         "qwen-vl-utils==0.0.11",
         "einops==0.8.1",
         "numpy==2.2.6",
+        "ninja",
+    )
+    .run_commands(
+        "pip install --no-build-isolation --no-cache-dir flash-attn"
     )
     .add_local_dir(
         LOCAL_QWEN_DIR,
         remote_path="/app/qwen",
         ignore=_ignore_runtime_file,
-        copy=True,  # Copy files into image (not just mount at runtime)
+        copy=True,
     )
-    .env({"PYTHONPATH": "/app/qwen"})
+    .env({"PYTHONPATH": "/app/qwen", "CUDA_HOME": "/usr/local/cuda", "MAX_JOBS": "1", "TORCH_CUDA_ARCH_LIST": "90"})
 )
 
 
@@ -87,10 +91,10 @@ qwen_image = (
 
 @app.function(
     image=qwen_image,
-    gpu="A10G",  # 24 GB VRAM (fits Qwen 2B fine-tune)
+    gpu="H100",
     timeout=900,
-    scaledown_window=600,  # Renamed from container_idle_timeout
-    min_containers=1,  # Renamed from keep_warm
+    scaledown_window=600,
+    min_containers=1,
     max_containers=1,
     volumes={"/model": model_volume},
 )
@@ -111,6 +115,7 @@ def qwen_modal_infer(
         max_new_tokens: Generation cap (defaults to env-configured value).
         temperature: Sampling temperature (0 => greedy).
     """
+    import time
     from inference_service import initialize_model, generate_cad_code
     from PIL import Image
 
@@ -127,12 +132,19 @@ def qwen_modal_infer(
             pil_image.format = image_format
         pil_image = pil_image.convert("RGB")
 
-    return generate_cad_code(
+    start = time.time()
+    output = generate_cad_code(
         prompt=prompt,
         image=pil_image,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
     )
+    duration = time.time() - start
+    try:
+        print(f"[Qwen Modal] Generation time: {duration:.2f}s | max_new_tokens={max_new_tokens}")
+    except Exception:
+        pass
+    return output
 
 
 # ---------------------------------------------------------------------------
@@ -171,4 +183,3 @@ def main(
     )
     print("------ CAD-Coder (Modal) Output ------")
     print(result)
-

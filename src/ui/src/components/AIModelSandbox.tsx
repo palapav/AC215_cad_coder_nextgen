@@ -154,53 +154,86 @@ export function AIModelSandbox() {
     setIsGenerating(true);
   
     try {
-      // ✅ Call your FastAPI /generate_cad endpoint
       const requestBody = {
         prompt: messageContent,
         image_path: image || null,
         user_id: "default",
-        model_choice: normalizedModel,  // must be "llava" or "qwen"
+        model_choice: normalizedModel,
         rag_context: null
       };
-      
-      console.log("[Frontend] Selected model:", selectedModel);
-      console.log("[Frontend] Normalized model:", normalizedModel);
-      console.log("[Frontend] Request body:", requestBody);
-      
-      const response = await fetch("http://localhost:8000/generate_cad", {
+
+      // Try streaming endpoint first
+      const streamResp = await fetch("http://localhost:8000/generate_cad_stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
-  
-      // Parse the backend response
-      const data = await response.json();
-      console.log("Backend raw response:", data);
-  
-      // ✅ Safely extract CAD code from response
-      const backendOutput =
-        data.cad_code ||
-        data.generated_code ||
-        data.output ||
-        data.result ||
-        "⚙️ Backend responded but no CAD code field found.";
-  
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: backendOutput,
-        timestamp: new Date(),
-        model: getModelName(selectedModel),
-      };
-  
-      // Add assistant reply to the current chat session
-      setSessions(prev =>
-        prev.map(session =>
-          session.id === currentSessionId
-            ? { ...session, messages: [...session.messages, assistantMessage] }
-            : session
-        )
-      );
+
+      if (streamResp.ok && streamResp.body) {
+        const reader = streamResp.body.getReader();
+        const decoder = new TextDecoder();
+        const assistantId = (Date.now() + 1).toString();
+
+        // Add an initial assistant message with empty content
+        setSessions(prev =>
+          prev.map(session =>
+            session.id === currentSessionId
+              ? { ...session, messages: [...session.messages, {
+                id: assistantId,
+                role: "assistant",
+                content: "",
+                timestamp: new Date(),
+                model: getModelName(selectedModel),
+              } as Message] }
+              : session
+          )
+        );
+
+        let done = false;
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+          if (value) {
+            const chunk = decoder.decode(value);
+            // Append chunk to the assistant message
+            setSessions(prev => prev.map(session => {
+              if (session.id !== currentSessionId) return session;
+              const updatedMessages = session.messages.map(m => 
+                m.id === assistantId ? { ...m, content: m.content + chunk } : m
+              );
+              return { ...session, messages: updatedMessages };
+            }));
+          }
+        }
+      } else {
+        // Fallback to non-streaming endpoint
+        const response = await fetch("http://localhost:8000/generate_cad", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+
+        const data = await response.json();
+        const backendOutput =
+          data.cad_code || data.generated_code || data.output || data.result ||
+          "⚙️ Backend responded but no CAD code field found.";
+
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: backendOutput,
+          timestamp: new Date(),
+          model: getModelName(selectedModel),
+        };
+
+        setSessions(prev =>
+          prev.map(session =>
+            session.id === currentSessionId
+              ? { ...session, messages: [...session.messages, assistantMessage] }
+              : session
+          )
+        );
+      }
     } catch (error) {
       console.error("Error contacting backend:", error);
       const errorMessage: Message = {
