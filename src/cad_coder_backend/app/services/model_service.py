@@ -148,6 +148,26 @@ async def _run_qwen_inference(prompt: str, image=None) -> str:
         raise RuntimeError(f"Unknown Qwen backend: {QWEN_INFERENCE_BACKEND}")
 
 
+async def _run_qwen_inference_stream(prompt: str, image=None):
+    """Stream Qwen tokens."""
+    if not _qwen_backend_enabled:
+        raise RuntimeError(f"Qwen backend ({QWEN_INFERENCE_BACKEND}) is not enabled.")
+    if _qwen_backend_init_error:
+        raise RuntimeError(f"Qwen backend initialization failed: {_qwen_backend_init_error}")
+
+    if QWEN_INFERENCE_BACKEND == "gke":
+        from app.services.gke_client import stream_gke_qwen_inference
+        async for chunk in stream_gke_qwen_inference(
+            prompt=prompt,
+            image=image,
+            max_new_tokens=int(os.getenv("QWEN_MODAL_MAX_NEW_TOKENS", "4096") or 4096),
+            temperature=float(os.getenv("QWEN_MODAL_TEMPERATURE", "0.0") or 0.0),
+        ):
+            yield chunk
+    else:
+        raise RuntimeError(f"Streaming not supported for backend: {QWEN_INFERENCE_BACKEND}")
+
+
 # ---------------------------------------------------------------------------
 # LLaVA Inference
 # ---------------------------------------------------------------------------
@@ -195,12 +215,55 @@ async def _run_llava_inference(prompt: str, image=None) -> str:
         raise RuntimeError(f"Unknown LLaVA backend: {LLAVA_INFERENCE_BACKEND}")
 
 
+async def _run_llava_inference_stream(prompt: str, image=None):
+    """Stream LLaVA tokens."""
+    if not _llava_backend_enabled:
+        raise RuntimeError(f"LLaVA backend ({LLAVA_INFERENCE_BACKEND}) is not enabled.")
+    if _llava_backend_init_error:
+        raise RuntimeError(f"LLaVA backend initialization failed: {_llava_backend_init_error}")
+
+    max_tokens = int(os.getenv("LLAVA_MODAL_MAX_NEW_TOKENS", "3450") or 3450)
+    temperature = float(os.getenv("LLAVA_MODAL_TEMPERATURE", "0.0") or 0.0)
+    top_p = float(os.getenv("LLAVA_MODAL_TOP_P", "1.0") or 1.0)
+
+    if LLAVA_INFERENCE_BACKEND == "gke":
+        from app.services.gke_client import stream_gke_llava_inference
+        async for chunk in stream_gke_llava_inference(
+            prompt=prompt,
+            image=image,
+            max_new_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+        ):
+            yield chunk
+    else:
+        raise RuntimeError(f"Streaming not supported for backend: {LLAVA_INFERENCE_BACKEND}")
+
+
 # ---------------------------------------------------------------------------
 # Placeholder responses (fallback when backend is not available)
 # ---------------------------------------------------------------------------
 
 def _llava_placeholder() -> str:
     return "# LLaVA generated\nimport cadquery as cq\ncq.Workplane('XY').box(1,1,1)"
+
+
+async def generate_cad_code_stream(
+    prompt: str,
+    image=None,
+    model_choice: ModelChoice = ModelChoice.QWEN,
+):
+    """
+    Stream CAD code tokens from the selected model.
+    """
+    if model_choice == ModelChoice.QWEN:
+        async for chunk in _run_qwen_inference_stream(prompt, image=image):
+            yield chunk
+    elif model_choice == ModelChoice.LLAVA:
+        async for chunk in _run_llava_inference_stream(prompt, image=image):
+            yield chunk
+    else:
+        raise RuntimeError(f"Streaming not supported for model: {model_choice}")
 
 
 def _qwen_placeholder() -> str:

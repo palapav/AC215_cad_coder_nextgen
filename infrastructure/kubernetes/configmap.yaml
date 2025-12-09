@@ -13,8 +13,12 @@ data:
   LOG_LEVEL: "INFO"
   
   # Inference Backend Selection (gke for GKE deployment)
-  QWEN_INFERENCE_BACKEND: "mock"
-  LLAVA_INFERENCE_BACKEND: "mock"
+  QWEN_INFERENCE_BACKEND: "gke"
+  LLAVA_INFERENCE_BACKEND: "gke"
+  MODEL_BUCKET: "cad-coder-models"           # GCS bucket for checkpoints
+  LLAVA_MODEL_BUCKET: "cad-coder-models"     # GCS bucket for LLaVA weights/cache
+  USE_VLLM: "false"                          # Toggle vLLM engine (optional)
+  USE_FLASH_ATTN: "true"                     # Enable FlashAttention2 when available
   
   # Qwen Service Configuration
   QWEN_SERVICE_URL: "http://qwen-inference:8080"

@@ -170,40 +170,66 @@ export function AIModelSandbox() {
       // Use relative URL to work with the ingress routing in production
       // In production, /api/* routes to the backend service
       const apiUrl = import.meta.env.VITE_API_URL || "/api";
-      const response = await fetch(`${apiUrl}/generate_cad`, {
+
+      // Prepare streaming response
+      const response = await fetch(`${apiUrl}/generate_cad_stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
-  
-      // Parse the backend response
-      const data = await response.json();
-      console.log("Backend raw response:", data);
-  
-      // ✅ Safely extract CAD code from response
-      const backendOutput =
-        data.cad_code ||
-        data.generated_code ||
-        data.output ||
-        data.result ||
-        "⚙️ Backend responded but no CAD code field found.";
-  
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: backendOutput,
-        timestamp: new Date(),
-        model: getModelName(selectedModel),
-      };
-  
-      // Add assistant reply to the current chat session
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Backend error: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      // Seed assistant message
+      const assistantId = (Date.now() + 1).toString();
       setSessions(prev =>
         prev.map(session =>
           session.id === currentSessionId
-            ? { ...session, messages: [...session.messages, assistantMessage] }
+            ? {
+                ...session,
+                messages: [
+                  ...session.messages,
+                  {
+                    id: assistantId,
+                    role: "assistant",
+                    content: "",
+                    timestamp: new Date(),
+                    model: getModelName(selectedModel),
+                  },
+                ],
+              }
             : session
         )
       );
+
+      // Read and append chunks
+      let accumulated = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        accumulated += chunk;
+
+        setSessions(prev =>
+          prev.map(session =>
+            session.id === currentSessionId
+              ? {
+                  ...session,
+                  messages: session.messages.map(msg =>
+                    msg.id === assistantId
+                      ? { ...msg, content: accumulated }
+                      : msg
+                  ),
+                }
+              : session
+          )
+        );
+      }
     } catch (error) {
       console.error("Error contacting backend:", error);
       const errorMessage: Message = {

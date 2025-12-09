@@ -27,7 +27,7 @@ from typing import Optional
 import torch
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
@@ -184,7 +184,7 @@ async def run_inference(request: InferenceRequest) -> InferenceResponse:
     start_time = time.time()
     
     try:
-        from inference_service import generate_cad_code
+from inference_service import generate_cad_code, generate_cad_code_stream
         
         # Decode image if provided
         pil_image = None
@@ -300,6 +300,34 @@ async def infer(request: InferenceRequest):
 async def generate(request: InferenceRequest):
     """Alternative endpoint for compatibility."""
     return await run_inference(request)
+
+
+@app.post("/stream")
+async def stream(request: InferenceRequest):
+    """Stream CAD code tokens as they are generated."""
+    if not model_state["ready"]:
+        raise HTTPException(status_code=503, detail="Model not ready")
+
+    try:
+        # Decode image if provided
+        pil_image = None
+        if request.image_bytes:
+            image_data = base64.b64decode(request.image_bytes)
+            pil_image = Image.open(io.BytesIO(image_data)).convert("RGB")
+
+        def token_generator():
+            for chunk in generate_cad_code_stream(
+                prompt=request.prompt,
+                image=pil_image,
+                max_new_tokens=request.max_new_tokens,
+                temperature=request.temperature,
+            ):
+                yield chunk
+
+        return StreamingResponse(token_generator(), media_type="text/plain")
+    except Exception as e:
+        logger.error(f"Streaming error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/metrics")

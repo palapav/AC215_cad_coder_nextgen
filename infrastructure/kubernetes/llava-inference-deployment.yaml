@@ -27,6 +27,37 @@ spec:
     spec:
       serviceAccountName: cad-coder-inference
       
+      initContainers:
+        - name: llava-model-loader
+          image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              if [ -z "$LLAVA_MODEL_BUCKET" ]; then
+                echo "LLAVA_MODEL_BUCKET not set, skipping download"
+                exit 0
+              fi
+              if [ ! -f /models/hf_cache/download.done ]; then
+                echo "Syncing LLaVA weights from GCS..."
+                mkdir -p /models/hf_cache
+                gsutil -m rsync -r gs://${LLAVA_MODEL_BUCKET}/llava/ /models/hf_cache/
+                touch /models/hf_cache/download.done
+              else
+                echo "LLaVA cache already present"
+              fi
+          env:
+            - name: LLAVA_MODEL_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: inference-config
+                  key: LLAVA_MODEL_BUCKET
+                  optional: true
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+      
       # Schedule on A100 GPU nodes
       nodeSelector:
         cloud.google.com/gke-accelerator: nvidia-tesla-a100

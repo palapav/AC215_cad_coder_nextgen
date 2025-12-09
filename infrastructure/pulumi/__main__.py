@@ -28,13 +28,16 @@ zone = gcp_config.get("zone") or "us-central1-a"
 
 # Cluster configuration
 cluster_name = config.get("cluster_name") or "cad-coder-cluster"
-node_count = config.get_int("node_count") or 1 # from 2
+node_count = config.get_int("node_count") or 1  # from 2
 gpu_node_count = config.get_int("gpu_node_count") or 1
-machine_type = config.get("machine_type") or "e2-standard-2" # from e2-standard-4
+machine_type = config.get("machine_type") or "e2-standard-2"  # from e2-standard-4
 gpu_machine_type = config.get("gpu_machine_type") or "n1-standard-8"
 gpu_type = config.get("gpu_type") or "nvidia-tesla-t4"
 gpu_count = config.get_int("gpu_count") or 1
-enable_gpu_pools = config.get_bool("enable_gpu_pools") or False
+# Enable GPU pools by default to support Qwen (T4) and LLaVA (A100)
+enable_gpu_pools = config.get_bool("enable_gpu_pools")
+if enable_gpu_pools is None:
+    enable_gpu_pools = True
 
 # Environment
 environment = config.get("environment") or "production"
@@ -280,15 +283,18 @@ if enable_gpu_pools:
         location=zone,
         project=project,
         
-        initial_node_count=0,  # Start with 0, scale up as needed
+        initial_node_count=gpu_node_count,  # Maintain at least one T4 for Qwen
         
         autoscaling=gcp.container.NodePoolAutoscalingArgs(
-            min_node_count=0,
+            min_node_count=gpu_node_count,
             max_node_count=5,
         ),
         
         node_config=gcp.container.NodePoolNodeConfigArgs(
             machine_type=gpu_machine_type,
+            image_type="COS_CONTAINERD",
+            disk_type="pd-ssd",
+            disk_size_gb=200,
             service_account=gke_sa.email,
             oauth_scopes=[
                 "https://www.googleapis.com/auth/cloud-platform",
@@ -310,14 +316,6 @@ if enable_gpu_pools:
                 "environment": environment,
                 "gpu": "true",
             },
-            
-            taints=[
-                gcp.container.NodePoolNodeConfigTaintArgs(
-                    key="nvidia.com/gpu",
-                    value="present",
-                    effect="NO_SCHEDULE",
-                ),
-            ],
             
             tags=["cad-coder", environment, "gpu"],
             
@@ -359,7 +357,7 @@ if enable_gpu_pools:
         location=zone,
         project=project,
         
-        initial_node_count=0,  # Start with 0, scale up on demand
+        initial_node_count=0,  # Start at 0; scale when LLaVA needed
         
         autoscaling=gcp.container.NodePoolAutoscalingArgs(
             min_node_count=0,
@@ -368,6 +366,9 @@ if enable_gpu_pools:
         
         node_config=gcp.container.NodePoolNodeConfigArgs(
             machine_type="a2-highgpu-1g",  # A100 40GB
+            image_type="COS_CONTAINERD",
+            disk_type="pd-ssd",
+            disk_size_gb=200,
             service_account=gke_sa.email,
             oauth_scopes=[
                 "https://www.googleapis.com/auth/cloud-platform",

@@ -25,7 +25,7 @@ on:
       deploy_models:
         description: 'Deploy model inference services'
         required: false
-        default: false
+        default: true
         type: boolean
 
 env:
@@ -119,6 +119,34 @@ jobs:
             ${{ steps.registry.outputs.url }}/cad-coder-frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Qwen Inference Image (T4)
+      - name: Build and push Qwen inference image
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/model_inference/qwen
+          file: ./src/model_inference/qwen/Dockerfile.gke
+          push: true
+          tags: |
+            ${{ steps.registry.outputs.url }}/cad-coder-qwen-inference:${{ steps.tags.outputs.tag }}
+            ${{ steps.registry.outputs.url }}/cad-coder-qwen-inference:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # LLaVA Inference Image (A100)
+      - name: Build and push LLaVA inference image
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/model_inference/llava_modal
+          file: ./src/model_inference/llava_modal/Dockerfile.gke
+          push: true
+          tags: |
+            ${{ steps.registry.outputs.url }}/cad-coder-llava-inference:${{ steps.tags.outputs.tag }}
+            ${{ steps.registry.outputs.url }}/cad-coder-llava-inference:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             VITE_API_URL=/api
       
@@ -198,7 +226,7 @@ jobs:
       id-token: write
     environment:
       name: ${{ github.event.inputs.environment || 'production' }}
-      url: https://cad-coder.example.com
+      url: https://cad-coder-nextgen-demo.com
     
     env:
       ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cad-coder-production
@@ -282,8 +310,19 @@ jobs:
             frontend=${{ env.ARTIFACT_REGISTRY }}/cad-coder-frontend:${{ env.IMAGE_TAG }} \
             --namespace=${{ env.K8S_NAMESPACE }}
       
-      # Inference services are intentionally skipped unless explicitly requested
-      # to avoid GPU/HPA errors and extra cost.
+      - name: Deploy Inference Services (Qwen + LLaVA)
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
+        run: |
+          kubectl apply -f infrastructure/kubernetes/qwen-inference-deployment.yaml
+          kubectl apply -f infrastructure/kubernetes/llava-inference-deployment.yaml
+
+          kubectl set image deployment/qwen-inference \
+            qwen-inference=${{ env.ARTIFACT_REGISTRY }}/cad-coder-qwen-inference:${{ env.IMAGE_TAG }} \
+            --namespace=${{ env.K8S_NAMESPACE }}
+
+          kubectl set image deployment/llava-inference \
+            llava-inference=${{ env.ARTIFACT_REGISTRY }}/cad-coder-llava-inference:${{ env.IMAGE_TAG }} \
+            --namespace=${{ env.K8S_NAMESPACE }}
       
       - name: Deploy Ingress
         run: |
@@ -296,6 +335,13 @@ jobs:
           
           echo "Waiting for frontend deployment..."
           kubectl rollout status deployment/frontend --namespace=cad-coder --timeout=180s
+          
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event.inputs.deploy_models }}" = "true" ]; then
+            echo "Waiting for Qwen inference deployment..."
+            kubectl rollout status deployment/qwen-inference --namespace=cad-coder --timeout=600s || true
+            echo "Waiting for LLaVA inference deployment..."
+            kubectl rollout status deployment/llava-inference --namespace=cad-coder --timeout=900s || true
+          fi
 
       - name: Collect rollout diagnostics on failure
         if: failure()

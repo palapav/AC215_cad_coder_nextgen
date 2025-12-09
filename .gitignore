@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.pt
 .cursor/
+src/model_inference/llava/llava/
 
 # C extensions
 *.so

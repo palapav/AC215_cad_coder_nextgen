@@ -27,11 +27,13 @@ from typing import Optional
 import torch
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
+from transformers import TextIteratorStreamer
+import threading
 
 # Configure logging
 logging.basicConfig(
@@ -247,6 +249,67 @@ def run_llava_inference(
     return outputs
 
 
+def stream_llava_inference(
+    prompt: str,
+    pil_image: Image.Image,
+    max_new_tokens: int,
+    temperature: float,
+    top_p: float,
+):
+    """Stream tokens while generating."""
+    from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN
+    from llava.conversation import conv_templates
+    from llava.mm_utils import tokenizer_image_token, process_images
+
+    tokenizer = model_state["tokenizer"]
+    model = model_state["model"]
+    image_processor = model_state["image_processor"]
+
+    image_tensor = process_images([pil_image], image_processor, model.config)[0]
+    image_tensor = image_tensor.to(dtype=torch.float16, device="cuda")
+
+    conv = conv_templates[CONV_MODE].copy()
+    if model.config.mm_use_im_start_end:
+        from llava.constants import DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+        inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + "\n" + prompt
+    else:
+        inp = DEFAULT_IMAGE_TOKEN + "\n" + prompt
+
+    conv.append_message(conv.roles[0], inp)
+    conv.append_message(conv.roles[1], None)
+    prompt_text = conv.get_prompt()
+
+    input_ids = tokenizer_image_token(
+        prompt_text,
+        tokenizer,
+        IMAGE_TOKEN_INDEX,
+        return_tensors="pt"
+    ).unsqueeze(0).cuda()
+
+    streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+
+    generation_kwargs = {
+        "inputs": input_ids,
+        "images": [image_tensor],
+        "max_new_tokens": max_new_tokens,
+        "do_sample": temperature > 0,
+        "temperature": temperature,
+        "top_p": top_p,
+        "use_cache": True,
+        "streamer": streamer,
+    }
+
+    def _generate():
+        with torch.inference_mode():
+            model.generate(**generation_kwargs)
+
+    thread = threading.Thread(target=_generate, daemon=True)
+    thread.start()
+
+    for text in streamer:
+        yield text
+
+
 async def run_inference(request: InferenceRequest) -> InferenceResponse:
     """Run inference on a single request."""
     if not model_state["ready"]:
@@ -372,6 +435,35 @@ async def infer(request: InferenceRequest):
 async def generate(request: InferenceRequest):
     """Alternative endpoint for compatibility."""
     return await run_inference(request)
+
+
+@app.post("/stream")
+async def stream(request: InferenceRequest):
+    """Stream tokens from the LLaVA generator."""
+    if not model_state["ready"]:
+        raise HTTPException(status_code=503, detail="Model not ready")
+
+    try:
+        if not request.image_bytes:
+            pil_image = Image.new("RGB", (336, 336), color=(0, 0, 0))
+        else:
+            image_data = base64.b64decode(request.image_bytes)
+            pil_image = Image.open(io.BytesIO(image_data)).convert("RGB")
+
+        def token_generator():
+            for chunk in stream_llava_inference(
+                prompt=request.prompt,
+                pil_image=pil_image,
+                max_new_tokens=request.max_new_tokens,
+                temperature=request.temperature,
+                top_p=request.top_p,
+            ):
+                yield chunk
+
+        return StreamingResponse(token_generator(), media_type="text/plain")
+    except Exception as e:
+        logger.error(f"Streaming error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/metrics")

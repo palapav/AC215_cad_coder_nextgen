@@ -318,6 +318,32 @@ async def run_gke_qwen_inference(
         raise GKEClientError(f"Qwen inference failed: {e}")
 
 
+async def stream_gke_qwen_inference(
+    prompt: str,
+    image: ImageInput = None,
+    max_new_tokens: int = QWEN_MAX_NEW_TOKENS,
+    temperature: float = QWEN_TEMPERATURE,
+):
+    """Stream tokens from the Qwen inference service."""
+    image_bytes, image_format = _serialize_image(image)
+
+    request_data = {
+        "prompt": prompt,
+        "image_bytes": image_bytes,
+        "image_format": image_format,
+        "max_new_tokens": max_new_tokens,
+        "temperature": temperature,
+    }
+
+    logger.info(f"Streaming from Qwen inference service at {QWEN_SERVICE_URL}")
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        async with client.stream("POST", f"{QWEN_SERVICE_URL}/stream", json=request_data) as resp:
+            resp.raise_for_status()
+            async for chunk in resp.aiter_text():
+                if chunk:
+                    yield chunk
+
+
 # =============================================================================
 # LLaVA Inference
 # =============================================================================
@@ -368,3 +394,31 @@ async def run_gke_llava_inference(
         raise
     except Exception as e:
         raise GKEClientError(f"LLaVA inference failed: {e}")
+
+
+async def stream_gke_llava_inference(
+    prompt: str,
+    image: ImageInput = None,
+    max_new_tokens: int = LLAVA_MAX_NEW_TOKENS,
+    temperature: float = LLAVA_TEMPERATURE,
+    top_p: float = LLAVA_TOP_P,
+):
+    """Stream tokens from the LLaVA inference service."""
+    image_bytes, image_format = _preprocess_image_for_llava(image, target_size=336)
+
+    request_data = {
+        "prompt": prompt,
+        "image_bytes": image_bytes,
+        "image_format": image_format,
+        "max_new_tokens": max_new_tokens,
+        "temperature": temperature,
+        "top_p": top_p,
+    }
+
+    logger.info(f"Streaming from LLaVA inference service at {LLAVA_SERVICE_URL}")
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        async with client.stream("POST", f"{LLAVA_SERVICE_URL}/stream", json=request_data) as resp:
+            resp.raise_for_status()
+            async for chunk in resp.aiter_text():
+                if chunk:
+                    yield chunk
