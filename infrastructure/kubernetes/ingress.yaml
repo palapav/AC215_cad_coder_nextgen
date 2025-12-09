@@ -10,12 +10,13 @@ metadata:
   annotations:
     # Use GCE Ingress
     kubernetes.io/ingress.class: "gce"
-    # Allow HTTP (no TLS/managed cert for IP-only access)
+    # Allow HTTP (will redirect to HTTPS)
     kubernetes.io/ingress.allow-http: "true"
     # Backend service health check configuration
     cloud.google.com/backend-config: '{"default": "cad-coder-backend-config"}'
-    # Static IP address (already created)
+    # Static IP address
     kubernetes.io/ingress.global-static-ip-name: "cad-coder-ip"
+    # Managed certificate for HTTPS
     networking.gke.io/managed-certificates: cad-coder-cert
 spec:
   rules:
