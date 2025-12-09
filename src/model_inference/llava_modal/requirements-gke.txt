@@ -1,4 +1,6 @@
 # Core ML dependencies (matching LLaVA requirements)
+# Note: flash-attn and vllm removed - they require compilation from source
+# which exceeds CI runner disk space. Using eager attention instead.
 torch==2.1.2
 torchvision==0.16.2
 transformers==4.37.2
@@ -7,8 +9,6 @@ sentencepiece==0.1.99
 accelerate==0.21.0
 peft
 bitsandbytes
-flash-attn==2.4.2
-vllm==0.4.2
 
 # LLaVA specific
 einops==0.6.1

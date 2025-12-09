@@ -184,7 +184,7 @@ async def run_inference(request: InferenceRequest) -> InferenceResponse:
     start_time = time.time()
     
     try:
-from inference_service import generate_cad_code, generate_cad_code_stream
+        from inference_service import generate_cad_code, generate_cad_code_stream
         
         # Decode image if provided
         pil_image = None

@@ -219,6 +219,7 @@ cluster = gcp.container.Cluster(
 # =============================================================================
 
 # Standard node pool for backend, frontend, and other services
+# Matches GKE: standard-pool with e2-standard-2, min=1, max=2
 standard_node_pool = gcp.container.NodePool(
     "standard-node-pool",
     name="standard-pool",
@@ -226,11 +227,11 @@ standard_node_pool = gcp.container.NodePool(
     location=zone,
     project=project,
     
-    initial_node_count=node_count,
+    initial_node_count=2,
     
     autoscaling=gcp.container.NodePoolAutoscalingArgs(
         min_node_count=1,
-        max_node_count=2, # from 10
+        max_node_count=2,
     ),
     
     node_config=gcp.container.NodePoolNodeConfigArgs(
@@ -257,23 +258,18 @@ standard_node_pool = gcp.container.NodePool(
         auto_repair=True,
         auto_upgrade=True,
     ),
+    opts=pulumi.ResourceOptions(
+        # Ignore GKE-managed fields that we don't control
+        ignore_changes=[
+            "nodeConfig.kubeletConfig",
+            "nodeConfig.resourceLabels",
+        ],
+    ),
 )
 
-# region agent log
-_agent_log("configured_standard_node_pool", {
-    "labels": {
-        "workload": "standard",
-        "environment": environment,
-    },
-    "node_count": node_count,
-    "machine_type": machine_type,
-    "image_type": "COS_CONTAINERD",
-    "disk_type": "pd-standard",
-    "disk_size_gb": 100,
-})
-# endregion agent log
-
-# GPU node pool for model inference (Qwen and LLaVA)
+# GPU node pool for Qwen inference (T4)
+# Matches GKE: gpu-pool with n1-standard-16, T4 GPU, min=2, max=5
+# Note: Has taint nvidia.com/gpu=present:NoSchedule (auto-added by GKE for GPU pools)
 gpu_node_pool = None
 if enable_gpu_pools:
     gpu_node_pool = gcp.container.NodePool(
@@ -283,15 +279,15 @@ if enable_gpu_pools:
         location=zone,
         project=project,
         
-        initial_node_count=gpu_node_count,  # Maintain at least one T4 for Qwen
+        initial_node_count=2,
         
         autoscaling=gcp.container.NodePoolAutoscalingArgs(
-            min_node_count=gpu_node_count,
+            min_node_count=2,
             max_node_count=5,
         ),
         
         node_config=gcp.container.NodePoolNodeConfigArgs(
-            machine_type=gpu_machine_type,
+            machine_type="n1-standard-16",
             image_type="COS_CONTAINERD",
             disk_type="pd-ssd",
             disk_size_gb=200,
@@ -300,16 +296,18 @@ if enable_gpu_pools:
                 "https://www.googleapis.com/auth/cloud-platform",
             ],
             
-            # GPU configuration
+            # GPU configuration - T4 for Qwen
             guest_accelerators=[
                 gcp.container.NodePoolNodeConfigGuestAcceleratorArgs(
-                    type=gpu_type,
-                    count=gpu_count,
+                    type="nvidia-tesla-t4",
+                    count=1,
                     gpu_driver_installation_config=gcp.container.NodePoolNodeConfigGuestAcceleratorGpuDriverInstallationConfigArgs(
                         gpu_driver_version="DEFAULT",
                     ),
                 ),
             ],
+            
+            # Note: GKE automatically adds taint nvidia.com/gpu=present:NoSchedule for GPU pools
             
             labels={
                 "workload": "gpu-inference",
@@ -328,28 +326,21 @@ if enable_gpu_pools:
             auto_repair=True,
             auto_upgrade=True,
         ),
+        opts=pulumi.ResourceOptions(
+            # Ignore GKE-managed fields that we don't control
+            ignore_changes=[
+                "nodeConfig.kubeletConfig",
+                "nodeConfig.resourceLabels",
+                "nodeConfig.taints",  # GKE auto-adds GPU taints
+            ],
+        ),
     )
 
-    # region agent log
-    _agent_log("configured_gpu_node_pool", {
-        "taints": "explicit-nvidia.com/gpu:present",
-        "labels": {
-            "workload": "gpu-inference",
-            "environment": environment,
-            "gpu": "true",
-        },
-    })
-    # endregion agent log
-else:
-    # region agent log
-    _agent_log("skipped_gpu_node_pool", {
-        "enable_gpu_pools": enable_gpu_pools,
-    })
-    # endregion agent log
-
+# A100 GPU node pool for LLaVA inference
+# Matches GKE: a100-pool with a2-highgpu-1g, A100 GPU, min=0, max=3
+# Note: Has taint nvidia.com/gpu=present:NoSchedule (auto-added by GKE for GPU pools)
 a100_node_pool = None
 if enable_gpu_pools:
-    # A100 GPU node pool for high-performance inference (LLaVA 13B)
     a100_node_pool = gcp.container.NodePool(
         "a100-node-pool",
         name="a100-pool",
@@ -357,7 +348,7 @@ if enable_gpu_pools:
         location=zone,
         project=project,
         
-        initial_node_count=0,  # Start at 0; scale when LLaVA needed
+        initial_node_count=0,  # Scale to 0 when not needed (A100s are expensive)
         
         autoscaling=gcp.container.NodePoolAutoscalingArgs(
             min_node_count=0,
@@ -384,6 +375,8 @@ if enable_gpu_pools:
                 ),
             ],
             
+            # Note: GKE automatically adds taint nvidia.com/gpu=present:NoSchedule for GPU pools
+            
             labels={
                 "workload": "gpu-inference-a100",
                 "environment": environment,
@@ -401,24 +394,15 @@ if enable_gpu_pools:
             auto_repair=True,
             auto_upgrade=True,
         ),
+        opts=pulumi.ResourceOptions(
+            # Ignore GKE-managed fields that we don't control
+            ignore_changes=[
+                "nodeConfig.kubeletConfig",
+                "nodeConfig.resourceLabels",
+                "nodeConfig.taints",  # GKE auto-adds GPU taints
+            ],
+        ),
     )
-
-    # region agent log
-    _agent_log("configured_a100_node_pool", {
-        "taints": "removed-explicit-taint",
-        "labels": {
-            "workload": "gpu-inference-a100",
-            "environment": environment,
-            "gpu": "a100",
-        },
-    })
-    # endregion agent log
-else:
-    # region agent log
-    _agent_log("skipped_a100_node_pool", {
-        "enable_gpu_pools": enable_gpu_pools,
-    })
-    # endregion agent log
 
 # =============================================================================
 # Artifact Registry for Container Images

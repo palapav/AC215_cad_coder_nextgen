@@ -1,5 +1,7 @@
 # Core ML dependencies
-torch>=2.2.0
+# Note: flash-attn and vllm removed - they require compilation from source
+# which exceeds CI runner disk space. Using eager attention instead.
+torch==2.2.0
 transformers>=4.40.0
 accelerate>=1.0.0
 sentencepiece>=0.2.0
@@ -8,8 +10,6 @@ pillow>=10.0.0
 qwen-vl-utils>=0.0.8
 einops>=0.7.0
 numpy>=1.26.0
-flash-attn==2.4.2
-vllm==0.4.2
 
 # Web server
 fastapi>=0.110.0

@@ -2,9 +2,11 @@
 # Qwen Inference Service Dockerfile for GKE GPU Deployment
 # =============================================================================
 # This Dockerfile creates a production-ready inference service for the
-# fine-tuned Qwen3-VL model running on GKE with NVIDIA GPUs.
+# fine-tuned Qwen3-VL model running on GKE with NVIDIA GPUs (T4).
+#
+# Uses prebuilt wheels to avoid compilation issues on CI runners.
 
-# Base image with CUDA and PyTorch
+# Base image with CUDA and PyTorch - use devel for potential custom ops
 FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime
 
 # Set environment variables
@@ -12,14 +14,15 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    # Disable flash attention compilation - use eager attention
+    TRANSFORMERS_NO_FLASH_ATTENTION=1
 
-# Install system dependencies
+# Install system dependencies (minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Create non-root user for security
 RUN useradd -m -u 1000 inference && \
@@ -28,9 +31,29 @@ RUN useradd -m -u 1000 inference && \
 
 WORKDIR /app
 
-# Install Python dependencies
+# Install Python dependencies in stages to manage layer sizes
+# First install core dependencies
 COPY requirements-gke.txt /app/
-RUN pip install --no-cache-dir -r requirements-gke.txt
+RUN pip install --no-cache-dir \
+    torch==2.2.0 \
+    transformers>=4.40.0 \
+    accelerate>=1.0.0 \
+    sentencepiece>=0.2.0 \
+    tokenizers>=0.19.0 \
+    pillow>=10.0.0 \
+    qwen-vl-utils>=0.0.8 \
+    einops>=0.7.0 \
+    numpy>=1.26.0
+
+# Install web server and utilities
+RUN pip install --no-cache-dir \
+    fastapi>=0.110.0 \
+    "uvicorn[standard]>=0.27.0" \
+    python-multipart>=0.0.9 \
+    pydantic>=2.0.0 \
+    httpx>=0.27.0 \
+    aiofiles>=23.0.0 \
+    prometheus-client>=0.19.0
 
 # Copy inference code
 COPY model_utils.py /app/

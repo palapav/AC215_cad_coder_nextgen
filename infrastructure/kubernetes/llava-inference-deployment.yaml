@@ -62,11 +62,11 @@ spec:
       nodeSelector:
         cloud.google.com/gke-accelerator: nvidia-tesla-a100
       
-      # Tolerate A100 GPU taints
+      # Tolerate GPU taints (GKE uses nvidia.com/gpu=present for all GPU pools)
       tolerations:
         - key: nvidia.com/gpu
           operator: Equal
-          value: a100
+          value: present
           effect: NoSchedule
       
       containers:
@@ -202,7 +202,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: llava-inference
-  minReplicas: 0  # Scale to zero when not needed (A100s are expensive)
+  minReplicas: 1  # Minimum 1 replica (scale-to-zero requires KEDA)
   maxReplicas: 3
   metrics:
     - type: Pods

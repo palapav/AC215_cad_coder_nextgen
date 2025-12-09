@@ -120,6 +120,31 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Free up disk space before building model images
+      - name: Free disk space for model images
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+          
+          # Remove unnecessary large packages
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          
+          # Clean apt cache
+          sudo apt-get clean
+          
+          # Clean docker
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+          
+          echo "Disk space after cleanup:"
+          df -h
+
       # Qwen Inference Image (T4)
       - name: Build and push Qwen inference image
         if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
@@ -135,11 +160,12 @@ jobs:
           cache-to: type=gha,mode=max
 
       # LLaVA Inference Image (A100)
+      # Note: Build context is src/model_inference to access llava module
       - name: Build and push LLaVA inference image
         if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
         uses: docker/build-push-action@v5
         with:
-          context: ./src/model_inference/llava_modal
+          context: ./src/model_inference
           file: ./src/model_inference/llava_modal/Dockerfile.gke
           push: true
           tags: |
@@ -147,8 +173,6 @@ jobs:
             ${{ steps.registry.outputs.url }}/cad-coder-llava-inference:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            VITE_API_URL=/api
       
       - name: Output image tags
         run: |
