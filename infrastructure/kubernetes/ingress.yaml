@@ -16,10 +16,11 @@ metadata:
     cloud.google.com/backend-config: '{"default": "cad-coder-backend-config"}'
     # Static IP address (already created)
     kubernetes.io/ingress.global-static-ip-name: "cad-coder-ip"
+    networking.gke.io/managed-certificates: cad-coder-cert
 spec:
   rules:
-    # Hostless (catch-all) rules for IP-only access
-    - http:
+    - host: cad-coder-nextgen-demo.com
+      http:
         paths:
           - path: /api
             pathType: Prefix
@@ -35,6 +36,7 @@ spec:
                 name: frontend
                 port:
                   number: 80
+
 ---
 # Network Policy for defense in depth
 apiVersion: networking.k8s.io/v1
