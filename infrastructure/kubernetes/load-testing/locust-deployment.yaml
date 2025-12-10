@@ -1,0 +1,278 @@
+---
+# Locust Master Deployment for distributed load testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-master
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: load-test
+    role: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cad-coder
+      component: load-test
+      role: master
+  template:
+    metadata:
+      labels:
+        app: cad-coder
+        component: load-test
+        role: master
+    spec:
+      containers:
+        - name: locust
+          image: locustio/locust:2.20.0
+          ports:
+            - containerPort: 8089
+              name: web
+            - containerPort: 5557
+              name: master
+          command:
+            - locust
+            - --master
+            - --host=http://backend:8000
+            - -f
+            - /mnt/locustfile.py
+          env:
+            - name: LOCUST_HOST
+              value: "http://backend:8000"
+          volumeMounts:
+            - name: locustfile
+              mountPath: /mnt
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: locustfile
+          configMap:
+            name: locust-config
+---
+# Locust Worker Deployment for distributed load generation
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-worker
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: load-test
+    role: worker
+spec:
+  replicas: 2  # Scale workers for higher load
+  selector:
+    matchLabels:
+      app: cad-coder
+      component: load-test
+      role: worker
+  template:
+    metadata:
+      labels:
+        app: cad-coder
+        component: load-test
+        role: worker
+    spec:
+      containers:
+        - name: locust
+          image: locustio/locust:2.20.0
+          command:
+            - locust
+            - --worker
+            - --master-host=locust-master
+            - -f
+            - /mnt/locustfile.py
+          env:
+            - name: LOCUST_HOST
+              value: "http://backend:8000"
+          volumeMounts:
+            - name: locustfile
+              mountPath: /mnt
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+      volumes:
+        - name: locustfile
+          configMap:
+            name: locust-config
+---
+# Service for Locust Master Web UI
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust-master
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: load-test
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8089
+      targetPort: 8089
+      name: web
+    - port: 5557
+      targetPort: 5557
+      name: master
+  selector:
+    app: cad-coder
+    component: load-test
+    role: master
+---
+# ConfigMap containing the Locust test file
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locust-config
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: load-test
+data:
+  locustfile.py: |
+    """
+    Kubernetes Load Testing for CAD-Coder
+    
+    Tests backend API endpoints and simulates user behavior.
+    GPU inference endpoints are tested when available.
+    """
+    
+    import random
+    import logging
+    from locust import HttpUser, task, between, events, tag
+    
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    
+    # Sample prompts for testing
+    SAMPLE_PROMPTS = [
+        "Generate CADQuery code for a simple cube",
+        "Create a cylindrical shape with radius 5",
+        "Design a bracket with mounting holes",
+        "Generate a simple washer",
+        "Create a rectangular plate",
+    ]
+    
+    
+    class CADCoderAPIUser(HttpUser):
+        """Simulates typical API usage patterns."""
+        
+        wait_time = between(1, 3)
+        
+        @task(10)
+        @tag("health")
+        def health_check(self):
+            """High-frequency health checks."""
+            with self.client.get("/api/health/", catch_response=True) as response:
+                if response.status_code == 200:
+                    response.success()
+                else:
+                    response.failure(f"Health check failed: {response.status_code}")
+        
+        @task(5)
+        @tag("api")
+        def root_endpoint(self):
+            """Test root API endpoint."""
+            self.client.get("/api/")
+        
+        @task(3)
+        @tag("history")
+        def get_history(self):
+            """Retrieve generation history."""
+            with self.client.get(
+                "/api/history",
+                params={"limit": 10},
+                catch_response=True,
+            ) as response:
+                if response.status_code in [200, 404]:
+                    response.success()
+                else:
+                    response.failure(f"History failed: {response.status_code}")
+        
+        @task(2)
+        @tag("inference")
+        def generate_cad_text_only(self):
+            """
+            Test CAD generation endpoint (text-only).
+            Note: This tests the full inference pipeline when GPU is available.
+            """
+            prompt = random.choice(SAMPLE_PROMPTS)
+            
+            payload = {
+                "prompt": prompt,
+                "model_choice": "qwen",
+                "image_path": None,
+                "user_id": "load-test",
+            }
+            
+            with self.client.post(
+                "/api/generate_cad",
+                json=payload,
+                catch_response=True,
+                timeout=180,
+                name="/api/generate_cad [text-only]",
+            ) as response:
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        if "cad_code" in data:
+                            response.success()
+                        else:
+                            response.failure("Missing cad_code")
+                    except Exception as e:
+                        response.failure(f"JSON parse error: {e}")
+                elif response.status_code == 503:
+                    # Service unavailable - GPU not ready
+                    response.failure("GPU service unavailable")
+                else:
+                    response.failure(f"Error: {response.status_code}")
+    
+    
+    class FrontendUser(HttpUser):
+        """Simulates frontend static asset requests."""
+        
+        wait_time = between(0.5, 2)
+        weight = 2  # Higher weight - more frontend traffic
+        
+        @task(10)
+        def load_index(self):
+            """Load main page."""
+            self.client.get("/")
+        
+        @task(5)
+        def load_assets(self):
+            """Simulate loading static assets."""
+            # These paths depend on your frontend build
+            self.client.get("/assets/index.js", name="/assets/[js]")
+            self.client.get("/assets/index.css", name="/assets/[css]")
+    
+    
+    @events.test_start.add_listener
+    def on_test_start(environment, **kwargs):
+        logger.info("=" * 50)
+        logger.info("CAD-Coder Kubernetes Load Test Starting")
+        logger.info(f"Target: {environment.host}")
+        logger.info("=" * 50)
+    
+    
+    @events.test_stop.add_listener
+    def on_test_stop(environment, **kwargs):
+        stats = environment.stats
+        logger.info("=" * 50)
+        logger.info("Load Test Complete")
+        logger.info(f"Total requests: {stats.total.num_requests}")
+        logger.info(f"Failed: {stats.total.num_failures}")
+        logger.info(f"Avg response time: {stats.total.avg_response_time:.2f}ms")
+        logger.info(f"RPS: {stats.total.current_rps:.2f}")
+        logger.info("=" * 50)
+

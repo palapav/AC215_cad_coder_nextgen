@@ -1,0 +1,172 @@
+---
+# Light Load Test Job (Baseline)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-test-light
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: load-test
+    scenario: light
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: cad-coder
+        component: load-test
+        scenario: light
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: locust
+          image: locustio/locust:2.20.0
+          command:
+            - locust
+            - -f
+            - /mnt/locustfile.py
+            - --headless
+            - --host=http://backend:8000
+            - -u
+            - "10"        # 10 concurrent users
+            - -r
+            - "2"         # 2 users/second spawn rate
+            - -t
+            - "5m"        # 5 minute duration
+            - --csv=/results/light-load
+            - --html=/results/light-load-report.html
+          volumeMounts:
+            - name: locustfile
+              mountPath: /mnt
+            - name: results
+              mountPath: /results
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+      volumes:
+        - name: locustfile
+          configMap:
+            name: locust-config
+        - name: results
+          emptyDir: {}
+---
+# Medium Load Test Job (Normal Operations)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-test-medium
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: load-test
+    scenario: medium
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: cad-coder
+        component: load-test
+        scenario: medium
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: locust
+          image: locustio/locust:2.20.0
+          command:
+            - locust
+            - -f
+            - /mnt/locustfile.py
+            - --headless
+            - --host=http://backend:8000
+            - -u
+            - "50"        # 50 concurrent users
+            - -r
+            - "5"         # 5 users/second spawn rate
+            - -t
+            - "10m"       # 10 minute duration
+            - --csv=/results/medium-load
+            - --html=/results/medium-load-report.html
+          volumeMounts:
+            - name: locustfile
+              mountPath: /mnt
+            - name: results
+              mountPath: /results
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: locustfile
+          configMap:
+            name: locust-config
+        - name: results
+          emptyDir: {}
+---
+# Heavy Load Test Job (Stress Test)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-test-heavy
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: load-test
+    scenario: heavy
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: cad-coder
+        component: load-test
+        scenario: heavy
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: locust
+          image: locustio/locust:2.20.0
+          command:
+            - locust
+            - -f
+            - /mnt/locustfile.py
+            - --headless
+            - --host=http://backend:8000
+            - -u
+            - "100"       # 100 concurrent users
+            - -r
+            - "10"        # 10 users/second spawn rate
+            - -t
+            - "15m"       # 15 minute duration
+            - --csv=/results/heavy-load
+            - --html=/results/heavy-load-report.html
+          volumeMounts:
+            - name: locustfile
+              mountPath: /mnt
+            - name: results
+              mountPath: /results
+          resources:
+            requests:
+              cpu: "1"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: locustfile
+          configMap:
+            name: locust-config
+        - name: results
+          emptyDir: {}
+
