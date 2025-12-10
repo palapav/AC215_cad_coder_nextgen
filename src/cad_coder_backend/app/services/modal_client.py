@@ -1,4 +1,9 @@
-"""Utilities for invoking Modal-hosted inference workers (Qwen and LLaVA)."""
+"""
+Utilities for invoking Modal-hosted inference workers (Qwen and LLaVA).
+
+Supports both GCP (GKE) and Modal Labs deployments.
+Modal provides instant GPU access without quota limitations.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +12,7 @@ import io
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, AsyncGenerator
 
 import modal
 from PIL import Image
@@ -51,6 +56,21 @@ def _lookup_qwen_modal_function() -> modal.functions.FunctionHandle:
         ) from exc
 
 
+@lru_cache(maxsize=1)
+def _lookup_qwen_modal_stream_function() -> modal.functions.FunctionHandle:
+    """Resolve the remote Qwen streaming Modal function handle once."""
+    _ensure_modal_credentials()
+    app_name = os.getenv("QWEN_MODAL_APP", "cad-coder-qwen3")
+    function_name = os.getenv("QWEN_MODAL_STREAM_FUNCTION", "qwen_modal_infer_stream")
+
+    try:
+        return modal.Function.from_name(app_name, function_name)
+    except Exception as exc:
+        raise ModalConfigError(
+            f"Unable to look up Modal streaming function {function_name!r} in app {app_name!r}: {exc}"
+        ) from exc
+
+
 # ---------------------------------------------------------------------------
 # LLaVA Modal Client
 # ---------------------------------------------------------------------------
@@ -72,6 +92,21 @@ def _lookup_llava_modal_function() -> modal.functions.FunctionHandle:
     except Exception as exc:
         raise ModalConfigError(
             f"Unable to look up Modal function {function_name!r} in app {app_name!r}: {exc}"
+        ) from exc
+
+
+@lru_cache(maxsize=1)
+def _lookup_llava_modal_stream_function() -> modal.functions.FunctionHandle:
+    """Resolve the remote LLaVA streaming Modal function handle once."""
+    _ensure_modal_credentials()
+    app_name = os.getenv("LLAVA_MODAL_APP", "cad-coder-llava")
+    function_name = os.getenv("LLAVA_MODAL_STREAM_FUNCTION", "llava_modal_infer_stream")
+
+    try:
+        return modal.Function.from_name(app_name, function_name)
+    except Exception as exc:
+        raise ModalConfigError(
+            f"Unable to look up Modal streaming function {function_name!r} in app {app_name!r}: {exc}"
         ) from exc
 
 
@@ -127,11 +162,7 @@ def _serialize_image(image: ImageInput) -> tuple[Optional[bytes], Optional[str]]
 
 
 def _load_pil_image(image: ImageInput) -> Image.Image:
-    """Deserialize supported image formats into a RGB PIL image.
-    
-    When no image is provided, a blank placeholder is returned so that
-    inference can still proceed.
-    """
+    """Deserialize supported image formats into a RGB PIL image."""
     if image is None:
         return Image.new("RGB", (336, 336), color=(0, 0, 0))
 
@@ -166,11 +197,7 @@ def _preprocess_image_for_llava(
     image: ImageInput,
     target_size: int = 336,
 ) -> tuple[Optional[bytes], Optional[str]]:
-    """Preprocess image with CLIP-like normalization for LLaVA.
-    
-    Applies padding to square and resizing before serialization. If the caller
-    does not supply an image, a blank placeholder image is generated.
-    """
+    """Preprocess image with CLIP-like normalization for LLaVA."""
     pil_image = _load_pil_image(image)
     
     # Pad to square (CLIP-like preprocessing)
@@ -205,12 +232,7 @@ async def run_modal_qwen_inference(
 ) -> str:
     """
     Execute CAD generation on the remote Qwen Modal GPU worker.
-
-    Args:
-        prompt: Text prompt (already validated upstream).
-        image: Optional PIL image, file path, or base64 data URL.
-        max_new_tokens: Generation limit forwarded to Modal.
-        temperature: Sampling temperature forwarded to Modal.
+    Non-streaming version - returns complete response.
     """
     fn_handle = _lookup_qwen_modal_function()
     image_bytes, image_format = _serialize_image(image)
@@ -228,6 +250,70 @@ async def run_modal_qwen_inference(
     return await loop.run_in_executor(None, _call_remote)
 
 
+async def stream_modal_qwen_inference(
+    prompt: str,
+    image: ImageInput = None,
+    max_new_tokens: int = 2048,
+    temperature: float = 0.0,
+) -> AsyncGenerator[str, None]:
+    """
+    Stream CAD generation tokens from the remote Qwen Modal GPU worker.
+    Yields tokens as they are generated for real-time frontend updates.
+    """
+    fn_handle = _lookup_qwen_modal_stream_function()
+    image_bytes, image_format = _serialize_image(image)
+
+    def _stream_remote():
+        """Generator that yields tokens from Modal."""
+        for chunk in fn_handle.remote_gen(
+            prompt=prompt,
+            image_bytes=image_bytes,
+            image_format=image_format,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+        ):
+            yield chunk
+
+    # Run the streaming in a thread to avoid blocking
+    loop = asyncio.get_running_loop()
+    
+    # Use a queue to pass tokens from the sync generator to async
+    import queue
+    token_queue: queue.Queue = queue.Queue()
+    done_sentinel = object()
+    
+    def _run_stream():
+        try:
+            for chunk in _stream_remote():
+                token_queue.put(chunk)
+        finally:
+            token_queue.put(done_sentinel)
+    
+    # Start streaming in background
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_run_stream)
+    
+    try:
+        while True:
+            # Check for tokens with a small timeout
+            try:
+                token = await loop.run_in_executor(
+                    None, 
+                    lambda: token_queue.get(timeout=0.1)
+                )
+                if token is done_sentinel:
+                    break
+                yield token
+            except queue.Empty:
+                # Check if the future is done with an exception
+                if future.done() and future.exception():
+                    raise future.exception()
+                continue
+    finally:
+        executor.shutdown(wait=False)
+
+
 # ---------------------------------------------------------------------------
 # LLaVA Inference
 # ---------------------------------------------------------------------------
@@ -241,20 +327,9 @@ async def run_modal_llava_inference(
 ) -> str:
     """
     Execute CAD generation on the remote LLaVA Modal GPU worker.
-
-    Args:
-        prompt: Text prompt for CAD code generation.
-        image: Required PIL image, file path, or base64 data URL.
-        max_new_tokens: Generation limit (default 3450 for LLaVA).
-        temperature: Sampling temperature (0 => greedy).
-        top_p: Top-p sampling parameter.
-    
-    Raises:
-        ValueError: If no image is provided (LLaVA requires an image).
+    Non-streaming version - returns complete response.
     """
     fn_handle = _lookup_llava_modal_function()
-    
-    # Apply CLIP-like preprocessing for LLaVA
     image_bytes, image_format = _preprocess_image_for_llava(image, target_size=336)
 
     def _call_remote() -> str:
@@ -269,3 +344,65 @@ async def run_modal_llava_inference(
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _call_remote)
+
+
+async def stream_modal_llava_inference(
+    prompt: str,
+    image: ImageInput = None,
+    max_new_tokens: int = 3450,
+    temperature: float = 0.0,
+    top_p: float = 1.0,
+) -> AsyncGenerator[str, None]:
+    """
+    Stream CAD generation tokens from the remote LLaVA Modal GPU worker.
+    Yields tokens as they are generated for real-time frontend updates.
+    """
+    fn_handle = _lookup_llava_modal_stream_function()
+    image_bytes, image_format = _preprocess_image_for_llava(image, target_size=336)
+
+    def _stream_remote():
+        """Generator that yields tokens from Modal."""
+        for chunk in fn_handle.remote_gen(
+            prompt=prompt,
+            image_bytes=image_bytes,
+            image_format=image_format,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=top_p,
+        ):
+            yield chunk
+
+    # Run the streaming in a thread to avoid blocking
+    loop = asyncio.get_running_loop()
+    
+    import queue
+    token_queue: queue.Queue = queue.Queue()
+    done_sentinel = object()
+    
+    def _run_stream():
+        try:
+            for chunk in _stream_remote():
+                token_queue.put(chunk)
+        finally:
+            token_queue.put(done_sentinel)
+    
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_run_stream)
+    
+    try:
+        while True:
+            try:
+                token = await loop.run_in_executor(
+                    None, 
+                    lambda: token_queue.get(timeout=0.1)
+                )
+                if token is done_sentinel:
+                    break
+                yield token
+            except queue.Empty:
+                if future.done() and future.exception():
+                    raise future.exception()
+                continue
+    finally:
+        executor.shutdown(wait=False)

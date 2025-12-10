@@ -188,7 +188,8 @@ spec:
     requests:
       storage: 100Gi  # LLaVA 13B is ~26GB
 ---
-# Horizontal Pod Autoscaler for LLaVA Inference (GPU-aware)
+# Horizontal Pod Autoscaler for LLaVA Inference
+# Fixed at 1 replica (exactly 1 A100 GPU pod)
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -202,35 +203,15 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: llava-inference
-  minReplicas: 1  # Minimum 1 replica (scale-to-zero requires KEDA)
-  maxReplicas: 3
+  minReplicas: 1
+  maxReplicas: 1  # Fixed at exactly 1 replica
   metrics:
-    - type: Pods
-      pods:
-        metric:
-          name: nvidia_gpu_duty_cycle
-        target:
-          type: AverageValue
-          averageValue: "70"
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 50
-  behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 900  # 15 min window to avoid frequent scaling
-      policies:
-        - type: Pods
-          value: 1
-          periodSeconds: 300
-    scaleUp:
-      stabilizationWindowSeconds: 30
-      policies:
-        - type: Pods
-          value: 1
-          periodSeconds: 60
+          averageUtilization: 80
 ---
 # KEDA ScaledObject for request-based autoscaling (alternative to HPA)
 # Uncomment if using KEDA for more advanced scaling based on queue length

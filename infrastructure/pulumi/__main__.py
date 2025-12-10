@@ -268,7 +268,7 @@ standard_node_pool = gcp.container.NodePool(
 )
 
 # GPU node pool for Qwen inference (T4)
-# Matches GKE: gpu-pool with n1-standard-16, T4 GPU, min=2, max=5
+# Exactly 1 on-demand T4 GPU for Qwen inference
 # Note: Has taint nvidia.com/gpu=present:NoSchedule (auto-added by GKE for GPU pools)
 gpu_node_pool = None
 if enable_gpu_pools:
@@ -279,11 +279,11 @@ if enable_gpu_pools:
         location=zone,
         project=project,
         
-        initial_node_count=2,
+        initial_node_count=1,
         
         autoscaling=gcp.container.NodePoolAutoscalingArgs(
-            min_node_count=2,
-            max_node_count=5,
+            min_node_count=1,
+            max_node_count=1,  # Exactly 1 on-demand T4
         ),
         
         node_config=gcp.container.NodePoolNodeConfigArgs(
@@ -337,7 +337,7 @@ if enable_gpu_pools:
     )
 
 # A100 GPU node pool for LLaVA inference
-# Matches GKE: a100-pool with a2-highgpu-1g, A100 GPU, min=0, max=3
+# Exactly 1 on-demand A100 GPU for LLaVA inference (pending quota approval)
 # Note: Has taint nvidia.com/gpu=present:NoSchedule (auto-added by GKE for GPU pools)
 a100_node_pool = None
 if enable_gpu_pools:
@@ -348,11 +348,11 @@ if enable_gpu_pools:
         location=zone,
         project=project,
         
-        initial_node_count=0,  # Scale to 0 when not needed (A100s are expensive)
+        initial_node_count=0,  # Start at 0 until quota approved, then scale to 1
         
         autoscaling=gcp.container.NodePoolAutoscalingArgs(
-            min_node_count=0,
-            max_node_count=3,
+            min_node_count=0,  # Allow 0 while waiting for quota
+            max_node_count=1,  # Exactly 1 on-demand A100 when quota available
         ),
         
         node_config=gcp.container.NodePoolNodeConfigArgs(
@@ -400,6 +400,144 @@ if enable_gpu_pools:
                 "nodeConfig.kubeletConfig",
                 "nodeConfig.resourceLabels",
                 "nodeConfig.taints",  # GKE auto-adds GPU taints
+            ],
+        ),
+    )
+
+# =============================================================================
+# Spot GPU Node Pools (Higher availability, lower cost, can be preempted)
+# =============================================================================
+
+# Spot T4 GPU node pool - fallback for Qwen when on-demand T4 is preempted or unavailable
+gpu_spot_node_pool = None
+if enable_gpu_pools:
+    gpu_spot_node_pool = gcp.container.NodePool(
+        "gpu-spot-node-pool",
+        name="gpu-spot-pool",
+        cluster=cluster.name,
+        location=zone,
+        project=project,
+        
+        initial_node_count=0,
+        
+        autoscaling=gcp.container.NodePoolAutoscalingArgs(
+            min_node_count=0,
+            max_node_count=1,  # 1 spot T4 as fallback
+        ),
+        
+        node_config=gcp.container.NodePoolNodeConfigArgs(
+            machine_type="n1-standard-16",
+            image_type="COS_CONTAINERD",
+            disk_type="pd-ssd",
+            disk_size_gb=200,
+            service_account=gke_sa.email,
+            oauth_scopes=[
+                "https://www.googleapis.com/auth/cloud-platform",
+            ],
+            
+            # Enable spot VMs
+            spot=True,
+            
+            guest_accelerators=[
+                gcp.container.NodePoolNodeConfigGuestAcceleratorArgs(
+                    type="nvidia-tesla-t4",
+                    count=1,
+                    gpu_driver_installation_config=gcp.container.NodePoolNodeConfigGuestAcceleratorGpuDriverInstallationConfigArgs(
+                        gpu_driver_version="DEFAULT",
+                    ),
+                ),
+            ],
+            
+            labels={
+                "workload": "gpu-inference",
+                "environment": environment,
+                "gpu": "true",
+                "spot": "true",
+            },
+            
+            tags=["cad-coder", environment, "gpu", "spot"],
+            
+            workload_metadata_config=gcp.container.NodePoolNodeConfigWorkloadMetadataConfigArgs(
+                mode="GKE_METADATA",
+            ),
+        ),
+        
+        management=gcp.container.NodePoolManagementArgs(
+            auto_repair=True,
+            auto_upgrade=True,
+        ),
+        opts=pulumi.ResourceOptions(
+            ignore_changes=[
+                "nodeConfig.kubeletConfig",
+                "nodeConfig.resourceLabels",
+                "nodeConfig.taints",
+            ],
+        ),
+    )
+
+# Spot A100 GPU node pool - fallback for LLaVA when on-demand A100 is preempted or unavailable
+a100_spot_node_pool = None
+if enable_gpu_pools:
+    a100_spot_node_pool = gcp.container.NodePool(
+        "a100-spot-node-pool",
+        name="a100-spot-pool",
+        cluster=cluster.name,
+        location=zone,
+        project=project,
+        
+        initial_node_count=0,
+        
+        autoscaling=gcp.container.NodePoolAutoscalingArgs(
+            min_node_count=0,
+            max_node_count=1,  # 1 spot A100 as fallback
+        ),
+        
+        node_config=gcp.container.NodePoolNodeConfigArgs(
+            machine_type="a2-highgpu-1g",
+            image_type="COS_CONTAINERD",
+            disk_type="pd-ssd",
+            disk_size_gb=200,
+            service_account=gke_sa.email,
+            oauth_scopes=[
+                "https://www.googleapis.com/auth/cloud-platform",
+            ],
+            
+            # Enable spot VMs
+            spot=True,
+            
+            guest_accelerators=[
+                gcp.container.NodePoolNodeConfigGuestAcceleratorArgs(
+                    type="nvidia-tesla-a100",
+                    count=1,
+                    gpu_driver_installation_config=gcp.container.NodePoolNodeConfigGuestAcceleratorGpuDriverInstallationConfigArgs(
+                        gpu_driver_version="DEFAULT",
+                    ),
+                ),
+            ],
+            
+            labels={
+                "workload": "gpu-inference-a100",
+                "environment": environment,
+                "gpu": "a100",
+                "spot": "true",
+            },
+            
+            tags=["cad-coder", environment, "gpu", "a100", "spot"],
+            
+            workload_metadata_config=gcp.container.NodePoolNodeConfigWorkloadMetadataConfigArgs(
+                mode="GKE_METADATA",
+            ),
+        ),
+        
+        management=gcp.container.NodePoolManagementArgs(
+            auto_repair=True,
+            auto_upgrade=True,
+        ),
+        opts=pulumi.ResourceOptions(
+            ignore_changes=[
+                "nodeConfig.kubeletConfig",
+                "nodeConfig.resourceLabels",
+                "nodeConfig.taints",
             ],
         ),
     )

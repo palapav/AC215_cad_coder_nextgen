@@ -118,7 +118,7 @@ async def _run_qwen_inference(prompt: str, image=None) -> str:
     if _qwen_backend_init_error:
         raise RuntimeError(f"Qwen backend initialization failed: {_qwen_backend_init_error}")
 
-    max_tokens = int(os.getenv("QWEN_MODAL_MAX_NEW_TOKENS", "2048") or 2048)
+    max_tokens = int(os.getenv("QWEN_MODAL_MAX_NEW_TOKENS", "4096") or 4096)
     temperature = float(os.getenv("QWEN_MODAL_TEMPERATURE", "0.0") or 0.0)
 
     # Route to appropriate backend
@@ -155,13 +155,25 @@ async def _run_qwen_inference_stream(prompt: str, image=None):
     if _qwen_backend_init_error:
         raise RuntimeError(f"Qwen backend initialization failed: {_qwen_backend_init_error}")
 
-    if QWEN_INFERENCE_BACKEND == "gke":
+    max_tokens = int(os.getenv("QWEN_MODAL_MAX_NEW_TOKENS", "4096") or 4096)
+    temperature = float(os.getenv("QWEN_MODAL_TEMPERATURE", "0.0") or 0.0)
+
+    if QWEN_INFERENCE_BACKEND == "modal":
+        from app.services.modal_client import stream_modal_qwen_inference
+        async for chunk in stream_modal_qwen_inference(
+            prompt=prompt,
+            image=image,
+            max_new_tokens=max_tokens,
+            temperature=temperature,
+        ):
+            yield chunk
+    elif QWEN_INFERENCE_BACKEND == "gke":
         from app.services.gke_client import stream_gke_qwen_inference
         async for chunk in stream_gke_qwen_inference(
             prompt=prompt,
             image=image,
-            max_new_tokens=int(os.getenv("QWEN_MODAL_MAX_NEW_TOKENS", "4096") or 4096),
-            temperature=float(os.getenv("QWEN_MODAL_TEMPERATURE", "0.0") or 0.0),
+            max_new_tokens=max_tokens,
+            temperature=temperature,
         ):
             yield chunk
     else:
@@ -182,7 +194,7 @@ async def _run_llava_inference(prompt: str, image=None) -> str:
     if _llava_backend_init_error:
         raise RuntimeError(f"LLaVA backend initialization failed: {_llava_backend_init_error}")
 
-    max_tokens = int(os.getenv("LLAVA_MODAL_MAX_NEW_TOKENS", "3450") or 3450)
+    max_tokens = int(os.getenv("LLAVA_MODAL_MAX_NEW_TOKENS", "4096") or 4096)
     temperature = float(os.getenv("LLAVA_MODAL_TEMPERATURE", "0.0") or 0.0)
     top_p = float(os.getenv("LLAVA_MODAL_TOP_P", "1.0") or 1.0)
 
@@ -222,11 +234,21 @@ async def _run_llava_inference_stream(prompt: str, image=None):
     if _llava_backend_init_error:
         raise RuntimeError(f"LLaVA backend initialization failed: {_llava_backend_init_error}")
 
-    max_tokens = int(os.getenv("LLAVA_MODAL_MAX_NEW_TOKENS", "3450") or 3450)
+    max_tokens = int(os.getenv("LLAVA_MODAL_MAX_NEW_TOKENS", "4096") or 4096)
     temperature = float(os.getenv("LLAVA_MODAL_TEMPERATURE", "0.0") or 0.0)
     top_p = float(os.getenv("LLAVA_MODAL_TOP_P", "1.0") or 1.0)
 
-    if LLAVA_INFERENCE_BACKEND == "gke":
+    if LLAVA_INFERENCE_BACKEND == "modal":
+        from app.services.modal_client import stream_modal_llava_inference
+        async for chunk in stream_modal_llava_inference(
+            prompt=prompt,
+            image=image,
+            max_new_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+        ):
+            yield chunk
+    elif LLAVA_INFERENCE_BACKEND == "gke":
         from app.services.gke_client import stream_gke_llava_inference
         async for chunk in stream_gke_llava_inference(
             prompt=prompt,

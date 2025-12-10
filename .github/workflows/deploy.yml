@@ -185,6 +185,54 @@ jobs:
           echo "  Frontend: ${{ steps.registry.outputs.url }}/cad-coder-frontend:${{ steps.tags.outputs.tag }}"
 
   # ==========================================================================
+  # Deploy Model Inference to GCP/Modal Labs
+  # ==========================================================================
+  deploy-models:
+    name: Deploy Models (GCP/Modal Labs)
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install Modal CLI
+        run: pip install modal
+      
+      - name: Deploy Qwen to GCP/Modal Labs
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          echo "Deploying Qwen model inference..."
+          modal deploy src/model_inference/qwen/modal_app.py
+      
+      - name: Deploy LLaVA to GCP/Modal Labs
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          echo "Deploying LLaVA model inference..."
+          modal deploy src/model_inference/llava_modal/modal_app.py
+      
+      - name: Verify Modal Deployments
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          echo "Verifying Modal deployments..."
+          modal app list
+
+  # ==========================================================================
   # Deploy Infrastructure with Pulumi
   # ==========================================================================
   deploy-infrastructure:
