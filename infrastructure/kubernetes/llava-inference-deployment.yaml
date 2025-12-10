@@ -1,5 +1,6 @@
 ---
 # LLaVA Model Inference Deployment (A100 GPU)
+# Set replicas: 1 to enable GKE GPU inference
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -10,7 +11,7 @@ metadata:
     component: llava-inference
     gpu: "a100"
 spec:
-  replicas: 1
+  replicas: 0  # Scale up when GPU nodes are available
   selector:
     matchLabels:
       app: cad-coder
