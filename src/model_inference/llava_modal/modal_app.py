@@ -165,100 +165,18 @@ def _initialize_llava_model():
 
 
 # ---------------------------------------------------------------------------
-# Shared GPU Function Configuration
-# Uses a single warm container for both streaming and non-streaming inference
+# GPU Function - Streaming Only (keeps 1 warm container)
 # ---------------------------------------------------------------------------
 
-_gpu_config = {
-    "image": llava_image,
-    "gpu": "A100",  # 40GB VRAM for LLaVA 13B
-    "timeout": 900,
-    "scaledown_window": 600,  # Keep container warm for 10 minutes
-    "min_containers": 1,      # Always keep 1 container warm for fast response
-    "max_containers": 1,      # Single container - streaming handles all requests
-    "volumes": {"/model_cache": model_volume},
-}
-
-
-@app.function(**_gpu_config)
-def llava_modal_infer(
-    prompt: str,
-    image_bytes: Optional[bytes] = None,
-    image_format: Optional[str] = None,
-    max_new_tokens: int = MAX_NEW_TOKENS_DEFAULT,
-    temperature: float = 0.0,
-    top_p: float = 1.0,
-) -> str:
-    """
-    Non-streaming inference entrypoint.
-    Returns the complete generated text.
-    
-    Preprocessing:
-    - Images are padded to square (CLIP-like preprocessing)
-    - Resized to 336x336 for CLIP vision encoder
-    - LLaVA uses vicuna conversation template
-    """
-    import torch
-    from PIL import Image
-    
-    from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN
-    from llava.conversation import conv_templates
-    from llava.mm_utils import tokenizer_image_token, process_images
-
-    tokenizer, model, image_processor, context_len = _initialize_llava_model()
-    
-    # Process image (LLaVA preprocessing - CLIP-like)
-    if image_bytes:
-        buffer = io.BytesIO(image_bytes)
-        pil_image = Image.open(buffer).convert("RGB")
-    else:
-        # Blank placeholder for text-only (LLaVA still needs an image)
-        pil_image = Image.new("RGB", (336, 336), color=(0, 0, 0))
-
-    # LLaVA image processing: resize, normalize for CLIP
-    image_tensor = process_images([pil_image], image_processor, model.config)[0]
-    image_tensor = image_tensor.to(dtype=torch.float16, device="cuda")
-    
-    # Build conversation prompt using LLaVA's vicuna template
-    conv = conv_templates[CONV_MODE].copy()
-    
-    if model.config.mm_use_im_start_end:
-        from llava.constants import DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
-        inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + "\n" + prompt
-    else:
-        inp = DEFAULT_IMAGE_TOKEN + "\n" + prompt
-    
-    conv.append_message(conv.roles[0], inp)
-    conv.append_message(conv.roles[1], None)
-    full_prompt = conv.get_prompt()
-    
-    # Tokenize with image token handling
-    input_ids = tokenizer_image_token(
-        full_prompt, 
-        tokenizer, 
-        IMAGE_TOKEN_INDEX, 
-        return_tensors="pt"
-    ).unsqueeze(0).cuda()
-    
-    # Generate
-    with torch.inference_mode():
-        output_ids = model.generate(
-            input_ids,
-            images=image_tensor.unsqueeze(0),
-            image_sizes=[pil_image.size],
-            do_sample=temperature > 0,
-            temperature=temperature if temperature > 0 else None,
-            top_p=top_p if temperature > 0 else None,
-            max_new_tokens=max_new_tokens,
-            use_cache=True,
-        )
-    
-    # Decode output
-    outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
-    return outputs
-
-
-@app.function(**_gpu_config)
+@app.function(
+    image=llava_image,
+    gpu="A100",  # 40GB VRAM for LLaVA 13B
+    timeout=900,
+    scaledown_window=600,  # Keep container warm for 10 minutes
+    min_containers=1,      # Always keep 1 container warm for fast response
+    max_containers=1,      # Single container handles all requests
+    volumes={"/model_cache": model_volume},
+)
 def llava_modal_infer_stream(
     prompt: str,
     image_bytes: Optional[bytes] = None,
@@ -268,7 +186,7 @@ def llava_modal_infer_stream(
     top_p: float = 1.0,
 ) -> Generator[str, None, None]:
     """
-    Streaming inference entrypoint.
+    Streaming inference entrypoint (PRIMARY).
     Yields tokens as they are generated for real-time streaming to frontend.
     
     This is the preferred method for production use as it provides
@@ -356,7 +274,6 @@ def main(
     image_path: Optional[str] = None,
     max_new_tokens: int = MAX_NEW_TOKENS_DEFAULT,
     temperature: float = 0.0,
-    stream: bool = True,  # Default to streaming
 ):
     """CLI for testing Modal inference."""
     if not image_path:
@@ -372,22 +289,12 @@ def main(
 
     print("------ CAD-Coder LLaVA (GCP/Modal Labs) Output ------")
     
-    if stream:
-        for chunk in llava_modal_infer_stream.remote_gen(
-            prompt=prompt,
-            image_bytes=image_bytes,
-            image_format=image_format,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-        ):
-            print(chunk, end="", flush=True)
-        print()
-    else:
-        result = llava_modal_infer.remote(
-            prompt=prompt,
-            image_bytes=image_bytes,
-            image_format=image_format,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-        )
-        print(result)
+    for chunk in llava_modal_infer_stream.remote_gen(
+        prompt=prompt,
+        image_bytes=image_bytes,
+        image_format=image_format,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+    ):
+        print(chunk, end="", flush=True)
+    print()

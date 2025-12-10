@@ -146,106 +146,18 @@ def _initialize_model():
 
 
 # ---------------------------------------------------------------------------
-# Shared GPU Function Configuration
-# Uses a single warm container for both streaming and non-streaming inference
+# GPU Function - Streaming Only (keeps 1 warm container)
 # ---------------------------------------------------------------------------
 
-_gpu_config = {
-    "image": qwen_image,
-    "gpu": "A10G",  # 24 GB VRAM - optimal for Qwen 2B
-    "timeout": 900,
-    "scaledown_window": 600,  # Keep container warm for 10 minutes
-    "min_containers": 1,      # Always keep 1 container warm for fast response
-    "max_containers": 1,      # Single container - streaming handles all requests
-    "volumes": {"/model": model_volume},
-}
-
-
-@app.function(**_gpu_config)
-def qwen_modal_infer(
-    prompt: str,
-    image_bytes: Optional[bytes] = None,
-    image_format: Optional[str] = None,
-    max_new_tokens: int = MAX_NEW_TOKENS_DEFAULT,
-    temperature: float = 0.0,
-) -> str:
-    """
-    Non-streaming inference entrypoint.
-    Returns the complete generated text.
-    
-    Preprocessing:
-    - Images are converted to RGB PIL format
-    - Qwen uses its native chat template with vision info processing
-    - Supports both image+text and text-only inputs
-    """
-    import torch
-    from PIL import Image
-    from qwen_vl_utils import process_vision_info
-    
-    model, processor = _initialize_model()
-    
-    # Process image if provided (Qwen preprocessing)
-    pil_image = None
-    if image_bytes:
-        buffer = io.BytesIO(image_bytes)
-        pil_image = Image.open(buffer).convert("RGB")
-    
-    # Build messages in Qwen format
-    if pil_image is not None:
-        messages = [[{
-            "role": "user",
-            "content": [
-                {"type": "image", "image": pil_image},
-                {"type": "text", "text": prompt}
-            ]
-        }]]
-    else:
-        messages = [[{
-            "role": "user",
-            "content": [{"type": "text", "text": prompt}]
-        }]]
-    
-    # Process inputs using Qwen's native preprocessing
-    texts = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    image_inputs, video_inputs = process_vision_info(messages)
-    
-    processor_kwargs = {"text": texts, "padding": True, "return_tensors": "pt"}
-    if image_inputs:
-        processor_kwargs["images"] = image_inputs
-    if video_inputs:
-        processor_kwargs["videos"] = video_inputs
-    
-    inputs = processor(**processor_kwargs)
-    device = model.device if hasattr(model, "device") else next(model.parameters()).device
-    inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
-    
-    # Generate with optimized settings
-    generation_kwargs = {
-        "max_new_tokens": max_new_tokens,
-        "use_cache": True,
-        "pad_token_id": processor.tokenizer.pad_token_id or processor.tokenizer.eos_token_id,
-        "do_sample": temperature > 0,
-    }
-    if temperature > 0:
-        generation_kwargs["temperature"] = temperature
-    
-    with torch.inference_mode():
-        generated_ids = model.generate(**inputs, **generation_kwargs)
-    
-    # Extract generated text
-    input_length = len(inputs["input_ids"][0])
-    generated_ids_trimmed = generated_ids[0][input_length:]
-    
-    generated_text = processor.decode(
-        generated_ids_trimmed, 
-        skip_special_tokens=True, 
-        clean_up_tokenization_spaces=False
-    )
-    
-    return generated_text.strip()
-
-
-@app.function(**_gpu_config)
+@app.function(
+    image=qwen_image,
+    gpu="A10G",  # 24 GB VRAM - optimal for Qwen 2B
+    timeout=900,
+    scaledown_window=600,  # Keep container warm for 10 minutes
+    min_containers=1,      # Always keep 1 container warm for fast response
+    max_containers=1,      # Single container handles all requests
+    volumes={"/model": model_volume},
+)
 def qwen_modal_infer_stream(
     prompt: str,
     image_bytes: Optional[bytes] = None,
@@ -254,7 +166,7 @@ def qwen_modal_infer_stream(
     temperature: float = 0.0,
 ) -> Generator[str, None, None]:
     """
-    Streaming inference entrypoint.
+    Streaming inference entrypoint (PRIMARY).
     Yields tokens as they are generated for real-time streaming to frontend.
     
     This is the preferred method for production use as it provides
@@ -343,7 +255,6 @@ def main(
     image_path: Optional[str] = None,
     max_new_tokens: int = MAX_NEW_TOKENS_DEFAULT,
     temperature: float = 0.0,
-    stream: bool = True,  # Default to streaming
 ):
     """CLI for testing Modal inference."""
     image_bytes = None
@@ -358,22 +269,12 @@ def main(
 
     print("------ CAD-Coder Qwen (GCP/Modal Labs) Output ------")
     
-    if stream:
-        for chunk in qwen_modal_infer_stream.remote_gen(
-            prompt=prompt,
-            image_bytes=image_bytes,
-            image_format=image_format,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-        ):
-            print(chunk, end="", flush=True)
-        print()
-    else:
-        result = qwen_modal_infer.remote(
-            prompt=prompt,
-            image_bytes=image_bytes,
-            image_format=image_format,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-        )
-        print(result)
+    for chunk in qwen_modal_infer_stream.remote_gen(
+        prompt=prompt,
+        image_bytes=image_bytes,
+        image_format=image_format,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+    ):
+        print(chunk, end="", flush=True)
+    print()
