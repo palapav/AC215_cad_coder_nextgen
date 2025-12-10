@@ -12,22 +12,28 @@ data:
   FRONTEND_ORIGIN: "https://cad-coder-nextgen-demo.com"
   LOG_LEVEL: "INFO"
   
-  # Inference Backend Selection (gke for GKE deployment)
-  QWEN_INFERENCE_BACKEND: "gke"
-  LLAVA_INFERENCE_BACKEND: "gke"
+  # Inference Backend Selection: "modal" or "gke"
+  QWEN_INFERENCE_BACKEND: "modal"
+  LLAVA_INFERENCE_BACKEND: "modal"
   MODEL_BUCKET: "cad-coder-models"           # GCS bucket for checkpoints
   LLAVA_MODEL_BUCKET: "cad-coder-models"     # GCS bucket for LLaVA weights/cache
   USE_VLLM: "false"                          # Toggle vLLM engine (optional)
   USE_FLASH_ATTN: "true"                     # Enable FlashAttention2 when available
   
-  # Qwen Service Configuration
+  # Qwen Service Configuration (GKE endpoints for fallback)
   QWEN_SERVICE_URL: "http://qwen-inference:8080"
+  QWEN_MODAL_APP: "cad-coder-qwen3"
+  QWEN_MODAL_FUNCTION: "qwen_modal_infer"
+  QWEN_MODAL_STREAM_FUNCTION: "qwen_modal_infer_stream"
   QWEN_MODAL_MAX_NEW_TOKENS: "4096"
   QWEN_MODAL_TEMPERATURE: "0.0"
   
-  # LLaVA Service Configuration
+  # LLaVA Service Configuration (GKE endpoints for fallback)
   LLAVA_SERVICE_URL: "http://llava-inference:8080"
-  LLAVA_MODAL_MAX_NEW_TOKENS: "3450"
+  LLAVA_MODAL_APP: "cad-coder-llava"
+  LLAVA_MODAL_FUNCTION: "llava_modal_infer"
+  LLAVA_MODAL_STREAM_FUNCTION: "llava_modal_infer_stream"
+  LLAVA_MODAL_MAX_NEW_TOKENS: "4096"
   LLAVA_MODAL_TEMPERATURE: "0.0"
   LLAVA_MODAL_TOP_P: "1.0"
   
