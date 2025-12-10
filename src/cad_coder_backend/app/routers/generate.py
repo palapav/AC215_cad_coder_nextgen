@@ -139,6 +139,7 @@ async def generate_cad_stream(input_data: CADInput):
                 prompt=prompt,
                 image=image_input,
                 model_choice=model_choice_enum,
+                image_reference=input_data.image_path,  # For RAG retrieval
             ):
                 buffer.append(chunk)
                 yield chunk

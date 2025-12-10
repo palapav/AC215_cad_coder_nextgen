@@ -274,12 +274,35 @@ async def generate_cad_code_stream(
     prompt: str,
     image=None,
     model_choice: ModelChoice = ModelChoice.QWEN,
+    image_reference: str = None,
 ):
     """
     Stream CAD code tokens from the selected model.
+    
+    For Qwen: RAG context is retrieved and prepended to the prompt before inference.
+    For LLaVA: No RAG (image-to-code model).
     """
     if model_choice == ModelChoice.QWEN:
-        async for chunk in _run_qwen_inference_stream(prompt, image=image):
+        # Retrieve RAG context for Qwen (gracefully handles errors)
+        prompt_for_model = prompt
+        try:
+            rag_payload = rag_service.retrieve_context(
+                prompt=prompt,
+                image=image,
+                image_reference=image_reference,
+            )
+            rag_context = rag_payload.get("context") or ""
+            if rag_context:
+                prompt_for_model = (
+                    f"{rag_context}\n\n"
+                    "Using the above CAD code examples as inspiration, respond to the user's request:\n"
+                    f"{prompt}"
+                )
+                logger.info("[Model Service] RAG context added to Qwen streaming request")
+        except Exception as exc:
+            logger.warning("[Model Service] RAG retrieval failed (continuing without): %s", exc)
+        
+        async for chunk in _run_qwen_inference_stream(prompt_for_model, image=image):
             yield chunk
     elif model_choice == ModelChoice.LLAVA:
         async for chunk in _run_llava_inference_stream(prompt, image=image):
