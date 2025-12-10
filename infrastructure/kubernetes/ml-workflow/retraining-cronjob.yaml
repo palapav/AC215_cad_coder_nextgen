@@ -1,0 +1,151 @@
+# ============================================================================
+# ML Workflow - Automated Retraining CronJob
+# ============================================================================
+# This CronJob triggers automated model retraining on a schedule.
+# 
+# NOTE: This job is DISABLED by default (suspend: true).
+# To enable scheduled retraining:
+#   kubectl patch cronjob ml-retraining-job -n cad-coder -p '{"spec":{"suspend":false}}'
+#
+# The job performs:
+# 1. Data preprocessing check
+# 2. Model training (if new data available)
+# 3. Model evaluation
+# 4. Validation against performance thresholds
+# 5. Conditional deployment (only if validation passes)
+# ============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ml-retraining-job
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: ml-workflow
+    tier: training
+spec:
+  # Run weekly on Sunday at 2 AM UTC (suspended by default)
+  schedule: "0 2 * * 0"
+  suspend: true  # DISABLED - set to false to enable scheduled retraining
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 21600  # 6 hours max
+      template:
+        metadata:
+          labels:
+            app: cad-coder
+            component: ml-workflow
+            tier: training
+        spec:
+          restartPolicy: Never
+          serviceAccountName: ml-workflow-sa
+          
+          # Prefer GPU nodes if available, but don't require them
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: cloud.google.com/gke-accelerator
+                        operator: Exists
+          
+          containers:
+            - name: ml-retraining
+              image: ${ARTIFACT_REGISTRY}/cad-coder-ml-workflow:latest
+              imagePullPolicy: Always
+              
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+                  echo "=============================================="
+                  echo "ML Workflow - Automated Retraining"
+                  echo "=============================================="
+                  echo "Triggered at: $(date -u)"
+                  echo "Trigger type: scheduled"
+                  echo ""
+                  
+                  # Run the ML workflow orchestrator
+                  python -m ml_workflow.orchestrator \
+                    --trigger-type scheduled \
+                    --workflow-id "scheduled-$(date +%Y%m%d-%H%M%S)" \
+                    --enable-validation \
+                    --deploy-on-success
+                  
+                  echo ""
+                  echo "=============================================="
+                  echo "ML Workflow completed at: $(date -u)"
+                  echo "=============================================="
+              
+              env:
+                - name: WORKFLOW_TRIGGER_TYPE
+                  value: "scheduled"
+                - name: ENABLE_DEPLOYMENT
+                  value: "true"
+                - name: VALIDATION_ENABLED
+                  value: "true"
+                # Model configuration
+                - name: BASE_MODEL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: ml-workflow-config
+                      key: BASE_MODEL
+                - name: OUTPUT_DIR
+                  value: "/models/output"
+                # Performance thresholds
+                - name: MIN_VALID_SAMPLE_RATE
+                  valueFrom:
+                    configMapKeyRef:
+                      name: ml-workflow-config
+                      key: MIN_VALID_SAMPLE_RATE
+                - name: MIN_MEAN_IOU
+                  valueFrom:
+                    configMapKeyRef:
+                      name: ml-workflow-config
+                      key: MIN_MEAN_IOU
+                # Secrets
+                - name: HF_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: cad-coder-secrets
+                      key: HF_TOKEN
+                      optional: true
+              
+              resources:
+                requests:
+                  memory: "8Gi"
+                  cpu: "2"
+                limits:
+                  memory: "32Gi"
+                  cpu: "8"
+                  # GPU limit - uncomment when GPU nodes are available
+                  # nvidia.com/gpu: "1"
+              
+              volumeMounts:
+                - name: model-storage
+                  mountPath: /models
+                - name: data-storage
+                  mountPath: /data
+          
+          volumes:
+            - name: model-storage
+              persistentVolumeClaim:
+                claimName: ml-model-storage
+            - name: data-storage
+              persistentVolumeClaim:
+                claimName: ml-data-storage
+
+---
+# ============================================================================
+# ML Workflow - Manual Trigger Job Template
+# ============================================================================
+# Use this template to manually trigger retraining:
+#   kubectl create job ml-retrain-manual-$(date +%s) --from=cronjob/ml-retraining-job -n cad-coder
+# ============================================================================
+

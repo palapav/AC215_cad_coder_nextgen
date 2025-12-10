@@ -1,0 +1,488 @@
+(.venv) jingxu@JingdeMacBook-Pro-44 AC215_cad_coder_nextgen % modal run src/model_finetuning/ml_workflow/modal_workflow.py \
+  --workflow-id test_run_$(date +%Y%m%d_%H%M%S) \
+  --trigger-type manual \
+  --max-training-samples 100 \
+  --max-test-samples 50
+✓ Initialized. View run at https://modal.com/apps/jing-xu3/main/ap-ENVqxsVOcM2IHlkqlSEPKv
+Building image im-HUIMNJeQTEknmKoiDuuMqg
+
+=> Step 0: FROM base
+
+=> Step 1: COPY . /
+Saving image...
+Image saved, took 2.65s
+
+Built image im-HUIMNJeQTEknmKoiDuuMqg in 10.89s
+
+
+Building image im-lR4rOfUDQ3Kkxe9GOrNP0a
+
+=> Step 0: FROM base
+
+=> Step 1: ENV PYTHONPATH=/app:/app/model_finetuning:/app/model_finetuning/CADRL
+Saving image...
+Image saved, took 1.87s
+
+Built image im-lR4rOfUDQ3Kkxe9GOrNP0a in 10.34s
+
+
+✓ Created objects.
+├── 🔨 Created mount 
+│   /Users/jingxu/Downloads/APCOMP_215/PROJECT/AC215_cad_coder_nextgen/src/model_finetuning/ml
+│   _workflow/modal_workflow.py
+├── 🔨 Created mount 
+│   /Users/jingxu/Downloads/APCOMP_215/PROJECT/AC215_cad_coder_nextgen/src/model_finetuning
+├── 🔨 Created function run_preprocessing.
+├── 🔨 Created function run_training.
+├── 🔨 Created function run_evaluation.
+├── 🔨 Created function run_validation.
+├── 🔨 Created function run_deployment.
+└── 🔨 Created function run_full_workflow.
+🚀 Triggering ML workflow: test_run_20251209_141924
+   Trigger type: manual
+   Deploy to Modal: True
+   Deploy to GCP: False
+   🧪 TEST MODE: Max training samples: 100
+   🧪 TEST MODE: Max test samples: 50
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 12.4.1
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+INFO:modal_workflow:🚀 Starting full ML workflow: test_run_20251209_141924
+INFO:modal_workflow:   Trigger: manual
+INFO:modal_workflow:🧪 TEST MODE: Limiting training to 100 samples
+INFO:modal_workflow:🧪 TEST MODE: Limiting evaluation to 50 test samples
+INFO:modal_workflow:Step 1/5: Preprocessing
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 12.4.1
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+INFO:modal_workflow:🔄 Starting preprocessing for workflow test_run_20251209_141924
+INFO:modal_workflow:✅ Preprocessing completed for workflow test_run_20251209_141924
+INFO:modal_workflow:Step 2/5: Training
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 12.4.1
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+INFO:modal_workflow:🔄 Starting training for workflow test_run_20251209_141924
+False
+
+===================================BUG REPORT===================================
+================================================================================
+The following directories listed in your path were found to be non-existent: {PosixPath('unix')}
+CUDA_SETUP: WARNING! libcudart.so not found in any environmental path. Searching in backup paths...
+DEBUG: Possible options found for libcudart.so: {PosixPath('/usr/local/cuda/lib64/libcudart.so')}
+CUDA SETUP: PyTorch settings found: CUDA_VERSION=124, Highest Compute Capability: 8.0.
+CUDA SETUP: To manually override the PyTorch CUDA version please see:https://github.com/TimDettmers/bitsandbytes/blob/main/how_to_use_nonpytorch_cuda.md
+CUDA SETUP: Required library version not found: libbitsandbytes_cuda124.so. Maybe you need to compile it from source?
+CUDA SETUP: Defaulting to libbitsandbytes_cpu.so...
+
+================================================ERROR=====================================
+CUDA SETUP: CUDA detection failed! Possible reasons:
+1. You need to manually override the PyTorch CUDA version. Please see: "https://github.com/TimDettmers/bitsandbytes/blob/main/how_to_use_nonpytorch_cuda.md
+2. CUDA driver not installed
+3. CUDA not installed
+4. You have multiple conflicting CUDA libraries
+5. Required library not pre-compiled for this bitsandbytes release!
+CUDA SETUP: If you compiled from source, try again with `make CUDA_VERSION=DETECTED_CUDA_VERSION` for example, `make CUDA_VERSION=113`.
+CUDA SETUP: The CUDA version for the compile might depend on your conda install. Inspect CUDA version via `conda list | grep cuda`.
+================================================================================
+
+CUDA SETUP: Something unexpected happened. Please compile from source:
+git clone https://github.com/TimDettmers/bitsandbytes.git
+cd bitsandbytes
+CUDA_VERSION=124
+python setup.py install
+CUDA SETUP: Setup Failed!
+WARNING:modal_workflow:⚠️  bitsandbytes not available: 
+        CUDA Setup failed despite GPU being available. Please run the following command to get more information:
+
+        python -m bitsandbytes
+
+        Inspect the output of the command and see if you can locate CUDA libraries. You might need to add them
+        to your LD_LIBRARY_PATH. If you suspect a bug, please take the information from python -m bitsandbytes
+        and open an issue at: https://github.com/TimDettmers/bitsandbytes/issues. Quantization will be disabled.
+INFO:datasets:PyTorch version 2.6.0+cu124 available.
+INFO:qwen_vl_utils.vision_process:set VIDEO_TOTAL_PIXELS: 90316800
+INFO:modal_workflow:📊 WandB logging enabled - training metrics will be tracked
+INFO:modal_workflow:   Project: CAD-Coder-ML-Workflow
+INFO:modal_workflow:📂 Using data paths:
+INFO:modal_workflow:   Client1: /data/data/partitioned/client1
+INFO:modal_workflow:   Client2: /data/data/partitioned/client2
+INFO:modal_workflow:   Combined: /data/data/partitioned/combined
+INFO:modal_workflow:🧪 TEST MODE: Limiting training to 100 samples
+INFO:modal_workflow:🔍 Checking data directories...
+INFO:modal_workflow:   Data volume name: cad-coder-training-data
+INFO:modal_workflow:   Volume mount point: /data
+INFO:modal_workflow:   Contents of /data: ['data']
+INFO:modal_workflow:   Contents of /data/data: ['partitioned']
+INFO:modal_workflow:   Contents of /data/data/partitioned: ['client1', 'client2', 'combined', 'test', 'validation']
+INFO:modal_workflow:   ✅ Found client1: /data/data/partitioned/client1
+INFO:modal_workflow:   ✅ Found client2: /data/data/partitioned/client2
+INFO:modal_workflow:🚀 Starting real training (this will log to WandB if enabled)...
+INFO:modal_workflow:   Training arguments: --base_model Qwen/Qwen3-VL-2B-Instruct --output_dir /models/trained/test_run_20251209_141924 --use_qlora --num_epochs 1 --batch_size 1 --lr 2e-05 --gradient_accumulation_steps 8 --checkpoint_steps 1000 --max_len 2048 --gradient_checkpointing --client1_dir /data/data/partitioned/client1 --client2_dir /data/data/partitioned/client2 --combined_dir /data/data/partitioned/combined --force_recombine --eval_steps 500 --val_samples 1000 --max_samples 100 --log_to_wandb --wandb_project CAD-Coder-ML-Workflow --wandb_name workflow_test_run_20251209_141924
+/opt/conda/lib/python3.11/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/opt/conda/lib/python3.11/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+=== Centralized Training ===
+Model: Qwen/Qwen3-VL-2B-Instruct
+Output: /models/trained/test_run_20251209_141924
+=== Creating Combined Training Dataset ===
+Client 1: /data/data/partitioned/client1
+Client 2: /data/data/partitioned/client2
+Client 1: 40 samples
+Client 2: 40 samples
+Combined: 80 samples
+Saving to cache: /data/data/partitioned/combined
+Saving the dataset (0/1 shards):   0%|          | 0/80 [00:00<?, ? examples/s]Saving the dataset (1/1 shards): 100%|██████████| 80/80 [00:00<00:00, 13932.25 examples/s]Saving the dataset (1/1 shards): 100%|██████████| 80/80 [00:00<00:00, 13394.98 examples/s]
+✓ Cached for future runs
+Loading processor...
+Training dataset: 80 samples
+⚠️  Validation dataset not found, skipping evaluation
+Loading model: Qwen/Qwen3-VL-2B-Instruct
+⚠️  Note: LoRA/QLoRA with FSDP uses bf16 (not 4-bit)
+`torch_dtype` is deprecated! Use `dtype` instead!
+Applying LoRA adapters (r=128, alpha=256)
+trainable params: 139,460,608 || all params: 2,266,992,640 || trainable%: 6.151789182694479
+
+Training config:
+  Epochs: 1
+  Steps/epoch: 10
+  Total steps: 10
+  Batch size: 1
+  Grad accum: 8
+  Effective batch: 8
+  Checkpoint every: 1000 steps
+WARNING:accelerate.utils.other:Detected kernel version 4.4.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+
+Starting training...
+ℹ️  No validation evaluation (use --eval_steps to enable)
+Training with 80 samples in 10 steps per epoch
+Training for 1 epochs (10 steps)
+wandb: Currently logged in as: jingxu1223 (jingxu1223-brown-university) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.0
+wandb: Run data is saved locally in /workspace/wandb/run-20251209_192056-2682ebux
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run workflow_test_run_20251209_141924
+wandb: ⭐️ View project at https://wandb.ai/jingxu1223-brown-university/CAD-Coder-ML-Workflow
+wandb: 🚀 View run at https://wandb.ai/jingxu1223-brown-university/CAD-Coder-ML-Workflow/runs/2682ebux
+Epoch 1
+  0%|          | 0/10 [00:00<?, ?it/s]/opt/conda/lib/python3.11/site-packages/torch/utils/checkpoint.py:87: UserWarning: None of the inputs have requires_grad=True. Gradients will be None
+  warnings.warn(
+`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+  0%|          | 0/10 [00:04<?, ?it/s, epoch loss=0.75830, loss=0.75830, lr=0.0000002, step=1, 10%|█         | 1/10 [00:04<00:44,  4.92s/it, epoch loss=0.75830, loss=0.75830, lr=0.0000002, step=1, kl loss=N/A] 10%|█         | 1/10 [00:07<00:44,  4.92s/it, epoch loss=0.68408, loss=0 20%|██        | 2/10 [00:07<00:30,  3.78s/it, epoch loss=0.68408, loss=0.60986, lr=0.0000004, step=2, kl loss=N/A] 20%|██        | 2/10 [00:10<00:30,  3.78s/it, epoch loss=0.72005, loss=0 30%|███       | 3/10 [00:10<00:24,  3.44s/it, epoch loss=0.72005, loss=0.79199, lr=0.0000006, step=3, kl loss=N/A] 30%|███       | 3/10 [00:13<00:24,  3.44s/it, epoch loss=0.74524, loss=0 40%|████      | 4/10 [00:13<00:19,  3.27s/it, epoch loss=0.74524, loss=0.82080, lr=0.0000008, step=4, kl loss=N/A] 40%|████      | 4/10 [00:16<00:19,  3.27s/it, epoch loss=0.75264, loss=0 50%|█████     | 5/10 [00:16<00:15,  3.18s/it, epoch loss=0.75264, loss=0.78223, lr=0.0000010, step=5, kl loss=N/A]⠧ Running (3/3 containers active)... View app at https://modal.com/apps/j
+ 50%|█████     | 5/10 [00:19<00:15,  3.18s/it, epoch loss=0.74276, loss=0.69336, lr=0.0000012, 60%|██████    | 6/10 [00:19<00:12,  3.12s/it, epoch loss=0.74276, loss=0.69336, lr=0.0000012, step=6, kl loss=N/A] 60%|██████    | 6/10 [00:23<00:12,  3.12s/it, epoch loss=0.74428, loss=0 70%|███████   | 7/10 [00:23<00:09,  3.09s/it, epoch loss=0.74428, loss=0.75342, lr=0.0000014, step=7, kl loss=N/A] 70%|███████   | 7/10 [00:26<00:09,  3.09s/it, epoch loss=0.73315, loss=0 80%|████████  | 8/10 [00:26<00:06,  3.07s/it, epoch loss=0.73315, loss=0.65527, lr=0.0000016, step=8, kl loss=N/A] 80%|████████  | 8/10 [00:29<00:06,  3.07s/it, epoch loss=0.72314, loss=0 90%|█████████ | 9/10 [00:29<00:03, 3.06s/it, epoch loss=0.72314, loss=0.64307, lr=0.0000018, step=9, kl loss=N/A] 90%|█████████ | 9/10 [00:32<00:03,  3.06s/it, epoch loss=0.73477, loss=0.83936, lr=0.0000020, step=10, kl loss=N/A]100%|██████████| 10/10 [00:32<00:00,  3.05s/it, epoch loss=0.73477, loss=0.83936, lr=0.0000020, step=10, kl loss=N/A]100%|██████████| 10/10 [00:32<00:00,  3.21s/it, epoch loss=0.73477, loss=0.83936, lr=0.0000020, step=10, kl loss=N/A]
+Epoch 1 completed. Average loss: 0.73477
+df: /root/.triton/autotune: No such file or directory
+Training completed. Final model saved to /models/trained/test_run_20251209_141924/final_model.pt
+
+💾 Saving final model...
+✓ Training complete!
+LoRA adapters saved: /models/trained/test_run_20251209_141924/final_lora_adapters
+To use: load base model + adapters with PeftModel.from_pretrained()
+INFO:modal_workflow:✅ Training completed for workflow test_run_20251209_141924
+INFO:modal_workflow:   Model saved to: /models/trained/test_run_20251209_141924/final_lora_adapters
+INFO:modal_workflow:   📦 Model directory contains 3 files/directories
+INFO:modal_workflow:   📄 Sample files: README.md, adapter_config.json, adapter_model.safetensors
+INFO:modal_workflow:   ✅ Model volume committed - model persisted to Modal volume
+INFO:modal_workflow:   📊 Check WandB dashboard for training metrics: https://wandb.ai
+INFO:modal_workflow:   Project: CAD-Coder-ML-Workflow
+INFO:modal_workflow:Step 3/5: Evaluation
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 12.4.1
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+INFO:modal_workflow:🔄 Starting evaluation for workflow test_run_20251209_141924
+INFO:datasets:PyTorch version 2.6.0+cu124 available.
+INFO:qwen_vl_utils.vision_process:set VIDEO_TOTAL_PIXELS: 90316800
+INFO:modal_workflow:🧪 TEST MODE: Limiting evaluation to 50 test samples
+INFO:modal_workflow:   Volume committed - file available at: /models/evaluations/test_run_20251209_141924/evaluation_results.json
+INFO:modal_workflow:✅ Evaluation completed for workflow test_run_20251209_141924
+INFO:modal_workflow:   Results saved to: /models/evaluations/test_run_20251209_141924/evaluation_results.json
+INFO:modal_workflow:Step 4/5: Validation
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 12.4.1
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+WARNING: The NVIDIA Driver was not detected.  GPU functionality will not be available.
+   Use the NVIDIA Container Toolkit to start this container with GPU support; see
+   https://docs.nvidia.com/datacenter/cloud-native/ .
+
+INFO:modal_workflow:🔄 Starting validation for workflow test_run_20251209_141924
+INFO:validation:Initialized validator with thresholds: {'min_valid_sample_rate': 0.95, 'min_mean_iou': 0.5, 'min_median_iou': 0.55, 'max_failed_generation_rate': 0.05}
+INFO:validation:Valid Sample Rate: 0.9697 (threshold: 0.9500) - PASS
+INFO:validation:Mean IOU: 0.5630 (threshold: 0.5000) - PASS
+INFO:validation:Median IOU: 0.6170 (threshold: 0.5500) - PASS
+INFO:validation:Failed Generation Rate: 0.0176 (threshold: 0.0500) - PASS
+INFO:validation:✅ Model validation PASSED - ready for deployment
+INFO:modal_workflow:✅ Validation PASSED for workflow test_run_20251209_141924
+INFO:modal_workflow:Step 5/5: Deployment
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 12.4.1
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+WARNING: The NVIDIA Driver was not detected.  GPU functionality will not be available.
+   Use the NVIDIA Container Toolkit to start this container with GPU support; see
+   https://docs.nvidia.com/datacenter/cloud-native/ .
+
+INFO:modal_workflow:🔄 Starting deployment for workflow test_run_20251209_141924
+INFO:deployment:Initialized Model Deployment (Modal: cad-coder-qwen3, GCP: cad-coder-nextgen)
+INFO:deployment:🚀 Deploying model to Modal Labs: v20251209_192243
+INFO:deployment:   Model path: /models/trained/test_run_20251209_141924/final_lora_adapters
+INFO:deployment:   Modal app: cad-coder-qwen3
+INFO:deployment:   Uploading /models/trained/test_run_20251209_141924/final_lora_adapters to Modal volume
+INFO:deployment:   Deploying Modal app: cad-coder-qwen3
+INFO:deployment:   Verifying deployment health
+INFO:deployment:   ✅ Deployment successful
+INFO:deployment:✅ Completed deployment for workflow test_run_20251209_141924
+INFO:modal_workflow:✅ Deployment completed for workflow test_run_20251209_141924
+INFO:modal_workflow:✅ Workflow test_run_20251209_141924 completed successfully
+
+============================================================
+WORKFLOW RESULTS
+============================================================
+{
+  "workflow_id": "test_run_20251209_141924",
+  "trigger_event": {
+    "trigger_type": "manual",
+    "timestamp": "2025-12-09T14:19:50.130360",
+    "source": "local"
+  },
+  "start_time": "2025-12-09T19:20:04.996827",
+  "steps": {
+    "preprocessing": {
+      "workflow_id": "test_run_20251209_141924",
+      "step": "preprocessing",
+      "status": "completed",
+      "timestamp": "2025-12-09T19:20:09.519209",
+      "data_paths": {
+        "client1": "./data/partitioned/client1",
+        "client2": "./data/partitioned/client2",
+        "combined": "./data/partitioned/combined",
+        "validation": "./data/partitioned/validation",
+        "test": "./data/partitioned/test"
+      },
+      "output_dir": "/models/preprocessed",
+      "samples_processed": 1000
+    },
+    "training": {
+      "workflow_id": "test_run_20251209_141924",
+      "step": "training",
+      "status": "completed",
+      "timestamp": "2025-12-09T19:21:55.285944",
+      "model_path": "/models/trained/test_run_20251209_141924/final_lora_adapters",
+      "training_config": {
+        "base_model": "Qwen/Qwen3-VL-2B-Instruct",
+        "num_epochs": 1,
+        "batch_size": 1,
+        "gradient_accumulation_steps": 8,
+        "learning_rate": 2e-05,
+        "checkpoint_steps": 1000,
+        "eval_steps": 500,
+        "val_samples": 1000,
+        "max_len": 2048,
+        "gradient_checkpointing": true,
+        "log_to_wandb": true,
+        "wandb_project": "CAD-Coder-ML-Workflow"
+      },
+      "metrics": {
+        "note": "Real training completed - check WandB for detailed metrics"
+      }
+    },
+    "evaluation": {
+      "workflow_id": "test_run_20251209_141924",
+      "step": "evaluation",
+      "status": "completed",
+      "timestamp": "2025-12-09T19:22:35.039156",
+      "results_path": "/models/evaluations/test_run_20251209_141924/evaluation_results.json",
+      "evaluation_results": {
+        "Best of N": {
+          "Valid Sample Rate (%)": 96.97,
+          "Mean IOU": 0.563,
+          "Median IOU": 0.617,
+          "Mean IOU (Adjusted)": 0.546
+        },
+        "Full Set": {
+          "Valid Sample Rate (%)": 96.97,
+          "Mean IOU": 0.563,
+          "Median IOU": 0.617,
+          "Mean IOU (Adjusted)": 0.546
+        },
+        "Error Analysis": {
+          "Failed GT (%)": 0.0,
+          "Failed Gen (%)": 1.76,
+          "Failed OCC (%)": 0.88,
+          "Timeouts (%)": 0.39,
+          "None Solids (%)": 0.0,
+          "Failed Processing (%)": 0.0
+        }
+      }
+    },
+    "validation": {
+      "workflow_id": "test_run_20251209_141924",
+      "step": "validation",
+      "status": "completed",
+      "timestamp": "2025-12-09T19:22:38.647554",
+      "validation_passed": true,
+      "validation_details": {
+        "results_file": "/models/evaluations/test_run_20251209_141924/evaluation_results.json",
+        "checks": {
+          "valid_sample_rate": {
+            "value": 0.9697,
+            "threshold": 0.95,
+            "passed": true
+          },
+          "mean_iou": {
+            "value": 0.563,
+            "threshold": 0.5,
+            "passed": true
+          },
+          "median_iou": {
+            "value": 0.617,
+            "threshold": 0.55,
+            "passed": true
+          },
+          "failed_generation_rate": {
+            "value": 0.0176,
+            "threshold": 0.05,
+            "passed": true
+          }
+        },
+        "passed": true,
+        "summary": "✅ All validation checks passed. Model is ready for deployment."
+      }
+    },
+    "deployment": {
+      "workflow_id": "test_run_20251209_141924",
+      "step": "deployment",
+      "status": "completed",
+      "timestamp": "2025-12-09T19:22:43.090301",
+      "deployment_result": {
+        "workflow_id": "test_run_20251209_141924",
+        "model_version": "v20251209_192243",
+        "model_path": "/models/trained/test_run_20251209_141924/final_lora_adapters",
+        "validation_results": {
+          "results_file": "/models/evaluations/test_run_20251209_141924/evaluation_results.json",
+          "checks": {
+            "valid_sample_rate": {
+              "value": 0.9697,
+              "threshold": 0.95,
+              "passed": true
+            },
+            "mean_iou": {
+              "value": 0.563,
+              "threshold": 0.5,
+              "passed": true
+            },
+            "median_iou": {
+              "value": 0.617,
+              "threshold": 0.55,
+              "passed": true
+            },
+            "failed_generation_rate": {
+              "value": 0.0176,
+              "threshold": 0.05,
+              "passed": true
+            }
+          },
+          "passed": true,
+          "summary": "✅ All validation checks passed. Model is ready for deployment."
+        },
+        "deployments": [
+          {
+            "workflow_id": "test_run_20251209_141924",
+            "model_version": "v20251209_192243",
+            "model_path": "/models/trained/test_run_20251209_141924/final_lora_adapters",
+            "platform": "modal",
+            "app_name": "cad-coder-qwen3",
+            "timestamp": "2025-12-09T19:22:43.089438",
+            "status": "deployed",
+            "deployment_steps": [
+              "Uploading /models/trained/test_run_20251209_141924/final_lora_adapters to Modal volume",
+              "Deploying Modal app: cad-coder-qwen3",
+              "Verifying deployment health",
+              "✅ Deployment successful"
+            ]
+          }
+        ],
+        "timestamp": "2025-12-09T19:22:43.089430"
+      }
+    }
+  },
+  "status": "completed",
+  "end_time": "2025-12-09T19:22:43.127577"
+}
+Stopping app - local entrypoint completed.
+wandb: 
+wandb: 🚀 View run workflow_test_run_20251209_141924 at: https://wandb.ai/jingxu1223-brown-university/CAD-Coder-ML-Workflow/runs/2682ebux
+wandb: Find logs at: wandb/run-20251209_192056-2682ebux/logs
+Runner terminated.
+✓ App completed. View run at https://modal.com/apps/jing-xu3/main/ap-ENVqxsVOcM2IHlkqlSEPKv
+

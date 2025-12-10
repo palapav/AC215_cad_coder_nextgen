@@ -1,0 +1,62 @@
+# ============================================================================
+# ML Workflow RBAC Configuration
+# ============================================================================
+# Service account and permissions for ML workflow jobs.
+# ============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ml-workflow-sa
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: ml-workflow
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ml-workflow-role
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: ml-workflow
+rules:
+  # Allow reading configmaps and secrets
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list"]
+  
+  # Allow creating jobs for deployment triggers
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create"]
+  
+  # Allow updating deployments (for model deployment)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch", "update"]
+  
+  # Allow reading pods for status checks
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ml-workflow-binding
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: ml-workflow
+subjects:
+  - kind: ServiceAccount
+    name: ml-workflow-sa
+    namespace: cad-coder
+roleRef:
+  kind: Role
+  name: ml-workflow-role
+  apiGroup: rbac.authorization.k8s.io
+

@@ -1,0 +1,43 @@
+# ============================================================================
+# ML Workflow Persistent Volume Claims
+# ============================================================================
+# Storage for model checkpoints and training data.
+# 
+# NOTE: These PVCs are OPTIONAL and only needed if running training on GKE.
+# For Modal Labs-based training, storage is handled by Modal volumes.
+# ============================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-model-storage
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: ml-workflow
+    tier: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard-rwo
+  resources:
+    requests:
+      storage: 50Gi  # Storage for model checkpoints
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-data-storage
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: ml-workflow
+    tier: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard-rwo
+  resources:
+    requests:
+      storage: 100Gi  # Storage for training data
+
