@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, aditya-milestone5]
   pull_request:
     branches: [main]
 
@@ -392,10 +392,11 @@ jobs:
           done
           
           if [ -n "$COVERAGE_FILES" ]; then
+            # Enforce 60% minimum coverage threshold
             python scripts/aggregate_coverage.py \
-              --threshold 0.50 \
+              --threshold 0.60 \
               --ignore-missing \
-              "$COVERAGE_FILES"
+              $COVERAGE_FILES
           else
             echo "Warning: No coverage files found to aggregate"
             exit 0
