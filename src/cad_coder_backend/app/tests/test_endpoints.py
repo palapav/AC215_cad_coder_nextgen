@@ -1,4 +1,5 @@
 """Basic endpoint tests for the FastAPI application."""
+import asyncio
 from fastapi.testclient import TestClient
 from unittest.mock import patch, Mock, AsyncMock, MagicMock
 import pytest

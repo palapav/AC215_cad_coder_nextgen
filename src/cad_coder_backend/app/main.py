@@ -7,8 +7,13 @@ import os
 from app.routers import generate, history, health, auth, pipeline
 from app.services.utils import setup_logging
 
-# ✅ Load environment variables early
-load_dotenv()
+# ✅ Load environment variables early (ignore permission errors on .env)
+try:
+    load_dotenv()
+except PermissionError:
+    # Non-fatal in CI/readonly environments
+    print("[Startup] ⚠️ Skipping .env load due to permissions")
+
 setup_logging()
 
 # ---------- FastAPI App ----------

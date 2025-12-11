@@ -6,7 +6,12 @@ from enum import Enum
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load dotenv, but ignore permission errors in read-only environments
+try:
+    load_dotenv()
+except PermissionError:
+    logger = logging.getLogger(__name__)
+    logger.warning("[Model Service] Skipping .env load due to permissions")
 
 from app.services import rag_service
 

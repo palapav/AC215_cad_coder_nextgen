@@ -14,7 +14,11 @@ from dotenv import load_dotenv
 
 from app.services.db_service import get_all_prompts
 
-load_dotenv()
+# Load env, ignore permission errors in restricted environments
+try:
+    load_dotenv()
+except PermissionError:
+    pass
 
 try:
     from PIL import Image
