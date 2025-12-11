@@ -10,7 +10,7 @@ This document summarizes the Continuous Integration and Testing setup for the CA
 - **Full Repository Coverage**: Tests cover backend, model-finetuning, datapipeline, data-versioning, and UI
 - **Reduced Token Counts**: Integration/E2E tests use 128 tokens (vs 4096 production) for speed
 - **Parallel Execution**: Independent jobs run concurrently
-- **50% Coverage Threshold**: Combined coverage across all components must meet 50%
+- **60% Coverage Threshold**: Combined coverage across all components must meet 60%
 
 ### GitHub Actions Workflow
 
