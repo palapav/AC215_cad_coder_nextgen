@@ -1,4 +1,5 @@
 """Basic endpoint tests for the FastAPI application."""
+import asyncio
 from fastapi.testclient import TestClient
 from unittest.mock import patch, Mock, AsyncMock, MagicMock
 import pytest
@@ -214,3 +215,210 @@ class TestServiceIntegrations:
         data, mime = modal_client._serialize_image(str(img_path))
         assert data is not None
         assert mime.lower().replace("/", "") == "png"
+
+    def test_model_service_generate_qwen(self, monkeypatch):
+        """Model service returns CAD dict for Qwen with RAG context."""
+        from app.services import model_service
+
+        async def mock_run_qwen(prompt, image=None):
+            return "# cad code qwen"
+
+        def mock_retrieve_context(**kwargs):
+            return {"context": "ctx", "results": [{"id": 1}], "used": True}
+
+        monkeypatch.setattr(model_service, "_run_qwen_inference", mock_run_qwen)
+        monkeypatch.setattr(model_service.rag_service, "retrieve_context", mock_retrieve_context)
+
+        result = asyncio.get_event_loop().run_until_complete(
+            model_service.generate_cad_code(prompt="p", model_choice="qwen")
+        )
+        assert result["cad_code"].startswith("# cad code")
+        assert result["rag_used"] is True
+        assert result["rag_context"] == "ctx"
+
+    def test_model_service_generate_llava(self, monkeypatch):
+        """Model service returns CAD dict for LLaVA."""
+        from app.services import model_service
+
+        async def mock_run_llava(prompt, image=None):
+            return "# cad code llava"
+
+        monkeypatch.setattr(model_service, "_run_llava_inference", mock_run_llava)
+
+        result = asyncio.get_event_loop().run_until_complete(
+            model_service.generate_cad_code(prompt="p", model_choice="llava")
+        )
+        assert result["cad_code"].startswith("# cad code")
+        assert result["rag_used"] is False
+
+    def test_model_service_invalid_choice_defaults_llava(self, monkeypatch):
+        """Invalid model choice should fall back to LLaVA path."""
+        from app.services import model_service
+
+        async def mock_run_llava(prompt, image=None):
+            return "# cad code llava"
+
+        monkeypatch.setattr(model_service, "_run_llava_inference", mock_run_llava)
+
+        result = asyncio.get_event_loop().run_until_complete(
+            model_service.generate_cad_code(prompt="p", model_choice="invalid")
+        )
+        assert "cad_code" in result
+
+    def test_rag_service_retrieve_context_basic(self, monkeypatch):
+        """RAG service should handle disabled flag gracefully."""
+        from app.services import rag_service
+
+        monkeypatch.setenv("ENABLE_RAG", "false")
+        import importlib
+        importlib.reload(rag_service)
+
+        res = rag_service.retrieve_context(prompt="p")
+        assert res["used"] is False
+        assert res["context"] == ""
+
+    def test_gke_client_serialize_image_none(self):
+        """GKE client serialize_image handles None."""
+        from app.services import gke_client
+
+        data, fmt = gke_client._serialize_image(None)
+        assert data is None
+        assert fmt is None
+
+    def test_modal_client_load_pil_image(self):
+        """Modal client load_pil_image handles PIL input."""
+        from app.services import modal_client
+
+        img = Image.new("RGB", (10, 10), color="red")
+        loaded = modal_client._load_pil_image(img)
+        assert loaded.mode == "RGB"
+
+    def test_modal_client_preprocess_llava_none(self):
+        """Modal client preprocess for LLaVA with None image."""
+        from app.services import modal_client
+
+        data, fmt = modal_client._preprocess_image_for_llava(None, target_size=64)
+        assert data is not None
+        assert fmt == "PNG"
+
+    # ------------------------------------------------------------------
+    # Additional coverage: GKE client, modal streaming, model_service streaming
+    # ------------------------------------------------------------------
+    @pytest.mark.asyncio
+    async def test_gke_client_run_qwen(self, monkeypatch):
+        """GKE Qwen inference returns generated text."""
+        from app.services import gke_client
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"generated_text": "cad code"}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.request.return_value = mock_resp
+
+        monkeypatch.setattr(gke_client, "_get_http_client", lambda: mock_client)
+
+        result = await gke_client.run_gke_qwen_inference(prompt="p")
+        assert "cad" in result
+
+    @pytest.mark.asyncio
+    async def test_gke_client_run_llava(self, monkeypatch):
+        """GKE LLaVA inference returns generated text."""
+        from app.services import gke_client
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"generated_text": "cad code llava"}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.request.return_value = mock_resp
+
+        monkeypatch.setattr(gke_client, "_get_http_client", lambda: mock_client)
+
+        result = await gke_client.run_gke_llava_inference(prompt="p")
+        assert "cad code" in result
+
+    @pytest.mark.asyncio
+    async def test_modal_client_stream_qwen_integration(self, monkeypatch):
+        """Modal streaming for Qwen yields joined chunks."""
+        from app.services import modal_client
+
+        mock_fn = MagicMock()
+        mock_fn.remote_gen.return_value = ["a", "b", "c"]
+
+        monkeypatch.setenv("MODAL_TOKEN_ID", "id")
+        monkeypatch.setenv("MODAL_TOKEN_SECRET", "secret")
+        monkeypatch.setenv("QWEN_MODAL_APP", "app")
+        monkeypatch.setenv("QWEN_MODAL_STREAM_FUNCTION", "fn")
+        monkeypatch.setattr(modal_client, "_lookup_qwen_modal_stream_function", lambda: mock_fn)
+
+        chunks = []
+        async for ch in modal_client.stream_modal_qwen_inference("p"):
+            chunks.append(ch)
+        assert "".join(chunks) == "abc"
+
+    @pytest.mark.asyncio
+    async def test_modal_client_stream_llava_integration(self, monkeypatch):
+        """Modal streaming for LLaVA yields joined chunks."""
+        from app.services import modal_client
+
+        mock_fn = MagicMock()
+        mock_fn.remote_gen.return_value = ["x", "y"]
+
+        monkeypatch.setenv("MODAL_TOKEN_ID", "id")
+        monkeypatch.setenv("MODAL_TOKEN_SECRET", "secret")
+        monkeypatch.setenv("LLAVA_MODAL_APP", "app")
+        monkeypatch.setenv("LLAVA_MODAL_STREAM_FUNCTION", "fn")
+        monkeypatch.setattr(modal_client, "_lookup_llava_modal_stream_function", lambda: mock_fn)
+
+        chunks = []
+        async for ch in modal_client.stream_modal_llava_inference("p"):
+            chunks.append(ch)
+        assert "".join(chunks) == "xy"
+
+    @pytest.mark.asyncio
+    async def test_model_service_stream_qwen(self, monkeypatch):
+        """Model service streaming path for Qwen."""
+        from app.services import model_service
+
+        async def mock_stream(prompt, image=None):
+            yield "chunk1"
+            yield "chunk2"
+
+        monkeypatch.setattr(model_service, "_run_qwen_inference_stream", mock_stream)
+
+        chunks = []
+        async for ch in model_service.generate_cad_code_stream(prompt="p", model_choice=model_service.ModelChoice.QWEN):
+            chunks.append(ch)
+        assert "".join(chunks) == "chunk1chunk2"
+
+    @pytest.mark.asyncio
+    async def test_model_service_stream_llava(self, monkeypatch):
+        """Model service streaming path for LLaVA."""
+        from app.services import model_service
+
+        async def mock_stream(prompt, image=None):
+            yield "l1"
+            yield "l2"
+
+        monkeypatch.setattr(model_service, "_run_llava_inference_stream", mock_stream)
+
+        chunks = []
+        async for ch in model_service.generate_cad_code_stream(prompt="p", model_choice=model_service.ModelChoice.LLAVA):
+            chunks.append(ch)
+        assert "".join(chunks) == "l1l2"
+
+    def test_rag_service_retrieve_similar_context_disabled(self, monkeypatch):
+        """RAG retrieve_similar_context when disabled."""
+        from app.services import rag_service
+        monkeypatch.setenv("ENABLE_RAG", "false")
+        import importlib
+        importlib.reload(rag_service)
+        res = rag_service.retrieve_similar_context("p")
+        assert isinstance(res, list)
+
+    def test_utils_init_environment(self, monkeypatch):
+        """utils.init_environment should not raise when .env missing."""
+        from app.services import utils
+        monkeypatch.setenv("SOME_ENV", "x")
+        utils.init_environment()

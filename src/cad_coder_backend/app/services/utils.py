@@ -14,5 +14,8 @@ def ensure_env_vars(*vars):
         raise EnvironmentError(f"Missing required environment variables: {', '.join(missing)}")
 
 def init_environment():
-    load_dotenv()
+    try:
+        load_dotenv()
+    except PermissionError:
+        pass
     setup_logging()

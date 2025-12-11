@@ -1,0 +1,6 @@
+name: cad-coder-gcp
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: CAD-Coder Production Infrastructure on GCP with GKE, GPU support, and auto-scaling

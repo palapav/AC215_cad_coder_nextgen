@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
@@ -7,8 +7,13 @@ import os
 from app.routers import generate, history, health, auth, pipeline
 from app.services.utils import setup_logging
 
-# ✅ Load environment variables early
-load_dotenv()
+# ✅ Load environment variables early (ignore permission errors on .env)
+try:
+    load_dotenv()
+except PermissionError:
+    # Non-fatal in CI/readonly environments
+    print("[Startup] ⚠️ Skipping .env load due to permissions")
+
 setup_logging()
 
 # ---------- FastAPI App ----------
@@ -33,23 +38,49 @@ async def startup_event():
         print("[Startup] Model will be loaded on first use (lazy loading)")
 
 # ---------- CORS (for React frontend) ----------
+# In production, frontend and backend are served from the same origin via ingress
+# So we need to allow the production IP as well as localhost for development
 origins = [
     os.getenv("FRONTEND_ORIGIN", "http://localhost:3000"),
     "http://127.0.0.1:3000",
+    "http://136.110.150.2",  # Production IP
+    "*",  # Allow all origins for flexibility (ingress handles routing)
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Allow all origins since ingress handles same-origin routing
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---------- Include Routers ----------
+# ---------- Include Routers with /api prefix ----------
+api_router = APIRouter(prefix="/api")
+api_router.include_router(generate.router)
+api_router.include_router(history.router)
+api_router.include_router(health.router)
+#api_router.include_router(auth.router) # skip auth for now
+api_router.include_router(pipeline.router)
+
+# Add a root /api endpoint
+@api_router.get("/")
+async def api_root():
+    return {
+        "message": "CAD-Coder API",
+        "version": "1.2.0",
+        "endpoints": {
+            "health": "/api/health/",
+            "generate": "/api/generate_cad",
+            "history": "/api/history/",
+        }
+    }
+
+app.include_router(api_router)
+
+# Also expose routers without the /api prefix for backward compatibility in tests
 app.include_router(generate.router)
 app.include_router(history.router)
 app.include_router(health.router)
-#app.include_router(auth.router) # skip auth for now
 app.include_router(pipeline.router)
 
 # ---------- Root Endpoint ----------

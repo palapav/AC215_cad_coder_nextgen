@@ -1,0 +1,8 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: cad-coder-cert
+  namespace: cad-coder
+spec:
+  domains:
+    - cad-coder-nextgen-demo.com

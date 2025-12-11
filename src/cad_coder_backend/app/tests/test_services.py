@@ -47,8 +47,8 @@ class TestModelService:
         """Test that generate_cad_code returns expected dict structure."""
         from app.services import model_service
         
-        # Mock the Modal inference functions
-        with patch.object(model_service, '_run_llava_via_modal', new_callable=AsyncMock) as mock_llava:
+        # Mock the inference functions
+        with patch.object(model_service, '_run_llava_inference', new_callable=AsyncMock) as mock_llava:
             mock_llava.return_value = "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)"
             
             result = await model_service.generate_cad_code(
@@ -67,7 +67,7 @@ class TestModelService:
         """Test model choice normalization."""
         from app.services import model_service
         
-        with patch.object(model_service, '_run_llava_via_modal', new_callable=AsyncMock) as mock_llava:
+        with patch.object(model_service, '_run_llava_inference', new_callable=AsyncMock) as mock_llava:
             mock_llava.return_value = "# test code"
             
             # Test with enum
@@ -82,7 +82,7 @@ class TestModelService:
         """Test that invalid model choice defaults to LLaVA."""
         from app.services import model_service
         
-        with patch.object(model_service, '_run_llava_via_modal', new_callable=AsyncMock) as mock_llava:
+        with patch.object(model_service, '_run_llava_inference', new_callable=AsyncMock) as mock_llava:
             mock_llava.return_value = "# llava code"
             
             result = await model_service.generate_cad_code(
@@ -99,7 +99,9 @@ class TestModelService:
         from app.services import model_service
 
         async_mock = AsyncMock(return_value="# generated code")
-        monkeypatch.setattr(model_service, "_run_qwen_via_modal", async_mock)
+        monkeypatch.setattr(model_service, "_run_qwen_inference", async_mock)
+        async_mock = AsyncMock(return_value="# generated code")
+        monkeypatch.setattr(model_service, "_run_qwen_inference", async_mock)
 
         def mock_retrieve_context(**kwargs):
             return {
@@ -464,6 +466,363 @@ class TestModalClient:
         
         with pytest.raises(ModalConfigError):
             _lookup_llava_modal_function()
+
+
+# ============================================================================
+# GKE Client Tests
+# ============================================================================
+class TestGKEClient:
+    """Test GKE inference client utilities."""
+
+    def test_gke_client_error(self):
+        """Test GKEClientError is defined."""
+        from app.services.gke_client import GKEClientError
+        
+        error = GKEClientError("Test error")
+        assert str(error) == "Test error"
+        assert isinstance(error, RuntimeError)
+
+    def test_gke_service_unavailable(self):
+        """Test GKEServiceUnavailable is defined."""
+        from app.services.gke_client import GKEServiceUnavailable
+        
+        error = GKEServiceUnavailable("Service down")
+        assert str(error) == "Service down"
+        assert isinstance(error, RuntimeError)
+
+    def test_serialize_image_none(self):
+        """Test serializing None image returns None."""
+        from app.services.gke_client import _serialize_image
+        
+        result, fmt = _serialize_image(None)
+        assert result is None
+        assert fmt is None
+
+    def test_serialize_image_pil(self):
+        """Test serializing PIL image."""
+        from PIL import Image
+        from app.services.gke_client import _serialize_image
+        
+        img = Image.new('RGB', (100, 100), color='red')
+        result, fmt = _serialize_image(img)
+        
+        assert result is not None
+        assert isinstance(result, str)  # base64 encoded
+        assert fmt == "PNG"
+
+    def test_serialize_image_base64_data_url(self):
+        """Test serializing base64 data URL."""
+        from PIL import Image
+        from app.services.gke_client import _serialize_image
+        
+        img = Image.new('RGB', (50, 50), color='blue')
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        b64_data = base64.b64encode(buffer.getvalue()).decode()
+        data_url = f"data:image/png;base64,{b64_data}"
+        
+        result, fmt = _serialize_image(data_url)
+        
+        assert result is not None
+        assert result == b64_data
+        assert fmt == "PNG"
+
+    def test_serialize_image_file_path(self, tmp_path):
+        """Test serializing image from file path."""
+        from PIL import Image
+        from app.services.gke_client import _serialize_image
+        
+        img_path = tmp_path / "test.png"
+        img = Image.new('RGB', (50, 50), color='green')
+        img.save(img_path)
+        
+        result, fmt = _serialize_image(str(img_path))
+        
+        assert result is not None
+        assert isinstance(result, str)
+        assert fmt == "PNG"
+
+    def test_serialize_image_file_not_found(self):
+        """Test serializing non-existent file raises error."""
+        from app.services.gke_client import _serialize_image
+        
+        with pytest.raises(FileNotFoundError):
+            _serialize_image("/nonexistent/path/image.png")
+
+    def test_serialize_image_invalid_type(self):
+        """Test serializing invalid type raises error."""
+        from app.services.gke_client import _serialize_image
+        
+        with pytest.raises(ValueError):
+            _serialize_image(12345)
+
+    def test_preprocess_image_for_llava_none(self):
+        """Test LLaVA preprocessing with None creates placeholder."""
+        from app.services.gke_client import _preprocess_image_for_llava
+        
+        result, fmt = _preprocess_image_for_llava(None, target_size=336)
+        
+        assert result is not None
+        assert isinstance(result, str)
+        assert fmt == "PNG"
+
+    def test_preprocess_image_for_llava_pil(self):
+        """Test LLaVA preprocessing with PIL image."""
+        from PIL import Image
+        from app.services.gke_client import _preprocess_image_for_llava
+        
+        img = Image.new('RGB', (100, 100), color='red')
+        result, fmt = _preprocess_image_for_llava(img, target_size=336)
+        
+        assert result is not None
+        assert isinstance(result, str)
+        assert fmt == "PNG"
+
+    def test_preprocess_image_for_llava_non_square(self):
+        """Test LLaVA preprocessing pads non-square images."""
+        from PIL import Image
+        from app.services.gke_client import _preprocess_image_for_llava
+        
+        # Wide image
+        img = Image.new('RGB', (200, 100), color='blue')
+        result, fmt = _preprocess_image_for_llava(img, target_size=336)
+        
+        assert result is not None
+        assert isinstance(result, str)
+
+    def test_preprocess_image_for_llava_tall_image(self):
+        """Test LLaVA preprocessing pads tall images."""
+        from PIL import Image
+        from app.services.gke_client import _preprocess_image_for_llava
+        
+        # Tall image (height > width)
+        img = Image.new('RGB', (150, 300), color='purple')
+        result, fmt = _preprocess_image_for_llava(img, target_size=336)
+        
+        assert result is not None
+        assert isinstance(result, str)
+
+    @pytest.mark.asyncio
+    async def test_check_qwen_health_failure(self, monkeypatch):
+        """Test Qwen health check returns False on failure."""
+        from app.services.gke_client import check_qwen_health
+        
+        mock_client = AsyncMock()
+        mock_client.get.side_effect = Exception("Connection refused")
+        
+        with patch('app.services.gke_client._get_http_client', return_value=mock_client):
+            result = await check_qwen_health()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_check_llava_health_failure(self, monkeypatch):
+        """Test LLaVA health check returns False on failure."""
+        from app.services.gke_client import check_llava_health
+        
+        mock_client = AsyncMock()
+        mock_client.get.side_effect = Exception("Connection refused")
+        
+        with patch('app.services.gke_client._get_http_client', return_value=mock_client):
+            result = await check_llava_health()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_run_gke_qwen_inference_mocked(self, monkeypatch):
+        """Test Qwen GKE inference with mocked HTTP client."""
+        from app.services.gke_client import run_gke_qwen_inference
+        
+        mock_response = Mock()
+        mock_response.json.return_value = {"generated_text": "import cadquery as cq"}
+        mock_response.raise_for_status = Mock()
+        
+        mock_client = AsyncMock()
+        mock_client.request.return_value = mock_response
+        
+        with patch('app.services.gke_client._get_http_client', return_value=mock_client):
+            result = await run_gke_qwen_inference(
+                prompt="make a cube",
+                image=None,
+                max_new_tokens=128,
+                temperature=0.0
+            )
+            
+            assert isinstance(result, str)
+            assert "cadquery" in result
+
+    @pytest.mark.asyncio
+    async def test_run_gke_llava_inference_mocked(self, monkeypatch):
+        """Test LLaVA GKE inference with mocked HTTP client."""
+        from PIL import Image
+        from app.services.gke_client import run_gke_llava_inference
+        
+        mock_response = Mock()
+        mock_response.json.return_value = {"generated_text": "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)"}
+        mock_response.raise_for_status = Mock()
+        
+        mock_client = AsyncMock()
+        mock_client.request.return_value = mock_response
+        
+        test_image = Image.new('RGB', (100, 100), color='red')
+        
+        with patch('app.services.gke_client._get_http_client', return_value=mock_client):
+            result = await run_gke_llava_inference(
+                prompt="make a cube",
+                image=test_image,
+                max_new_tokens=128,
+                temperature=0.0,
+                top_p=1.0
+            )
+            
+            assert isinstance(result, str)
+            assert "cadquery" in result
+
+
+# ============================================================================
+# Streaming Tests
+# ============================================================================
+class TestStreamingInference:
+    """Test streaming inference functionality."""
+
+    @pytest.mark.asyncio
+    async def test_stream_modal_qwen_inference_mocked(self, monkeypatch):
+        """Test Qwen Modal streaming with mocked function."""
+        from app.services.modal_client import stream_modal_qwen_inference
+        
+        # Return a simple list from remote_gen (sync generator expected)
+        mock_fn_handle = MagicMock()
+        mock_fn_handle.remote_gen.return_value = ["import ", "cadquery ", "as cq"]
+        
+        monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
+        monkeypatch.setenv("MODAL_TOKEN_SECRET", "test_secret")
+        monkeypatch.setenv("QWEN_MODAL_APP", "test-app")
+        monkeypatch.setenv("QWEN_MODAL_STREAM_FUNCTION", "test-fn-stream")
+        
+        with patch('app.services.modal_client._lookup_qwen_modal_stream_function', return_value=mock_fn_handle):
+            chunks = []
+            async for chunk in stream_modal_qwen_inference(
+                prompt="make a sphere",
+                image=None,
+                max_new_tokens=128,
+                temperature=0.0
+            ):
+                chunks.append(chunk)
+            
+            assert len(chunks) == 3
+            assert "".join(chunks) == "import cadquery as cq"
+
+    @pytest.mark.asyncio
+    async def test_stream_modal_llava_inference_mocked(self, monkeypatch):
+        """Test LLaVA Modal streaming with mocked function."""
+        from PIL import Image
+        from app.services.modal_client import stream_modal_llava_inference
+        
+        mock_fn_handle = MagicMock()
+        mock_fn_handle.remote_gen.return_value = ["result = ", "cq.box(1,1,1)"]
+        
+        monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
+        monkeypatch.setenv("MODAL_TOKEN_SECRET", "test_secret")
+        monkeypatch.setenv("LLAVA_MODAL_APP", "test-app")
+        monkeypatch.setenv("LLAVA_MODAL_STREAM_FUNCTION", "test-fn-stream")
+        
+        test_image = Image.new('RGB', (100, 100), color='red')
+        
+        with patch('app.services.modal_client._lookup_llava_modal_stream_function', return_value=mock_fn_handle):
+            chunks = []
+            async for chunk in stream_modal_llava_inference(
+                prompt="make a cube",
+                image=test_image,
+                max_new_tokens=128,
+                temperature=0.0,
+                top_p=1.0
+            ):
+                chunks.append(chunk)
+            
+            assert len(chunks) == 2
+            assert "".join(chunks) == "result = cq.box(1,1,1)"
+
+    @pytest.mark.asyncio
+    async def test_generate_cad_code_stream_qwen(self, monkeypatch):
+        """Test streaming CAD code generation with Qwen."""
+        from app.services import model_service
+        
+        async def mock_stream(prompt, image=None):
+            yield "import cadquery as cq\n"
+            yield "result = cq.Workplane('XY').sphere(0.5)"
+        
+        monkeypatch.setattr(model_service, "_run_qwen_inference_stream", mock_stream)
+        
+        # Mock RAG service
+        def mock_retrieve_context(**kwargs):
+            return {"context": "", "results": [], "used": False}
+        monkeypatch.setattr(model_service.rag_service, "retrieve_context", mock_retrieve_context)
+        
+        chunks = []
+        async for chunk in model_service.generate_cad_code_stream(
+            prompt="make a sphere",
+            model_choice=model_service.ModelChoice.QWEN
+        ):
+            chunks.append(chunk)
+        
+        assert len(chunks) == 2
+        full_code = "".join(chunks)
+        assert "cadquery" in full_code
+        assert "sphere" in full_code
+
+    @pytest.mark.asyncio
+    async def test_generate_cad_code_stream_llava(self, monkeypatch):
+        """Test streaming CAD code generation with LLaVA."""
+        from app.services import model_service
+        
+        async def mock_stream(prompt, image=None):
+            yield "import cadquery as cq\n"
+            yield "result = cq.Workplane('XY').box(1,1,1)"
+        
+        monkeypatch.setattr(model_service, "_run_llava_inference_stream", mock_stream)
+        
+        chunks = []
+        async for chunk in model_service.generate_cad_code_stream(
+            prompt="make a box",
+            model_choice=model_service.ModelChoice.LLAVA
+        ):
+            chunks.append(chunk)
+        
+        assert len(chunks) == 2
+        full_code = "".join(chunks)
+        assert "cadquery" in full_code
+        assert "box" in full_code
+
+    @pytest.mark.asyncio
+    async def test_generate_cad_code_stream_with_rag_context(self, monkeypatch):
+        """Test streaming with RAG context injection."""
+        from app.services import model_service
+        
+        captured_prompts = []
+        
+        async def mock_stream(prompt, image=None):
+            captured_prompts.append(prompt)
+            yield "# generated code"
+        
+        monkeypatch.setattr(model_service, "_run_qwen_inference_stream", mock_stream)
+        
+        def mock_retrieve_context(**kwargs):
+            return {
+                "context": "Example CAD: cq.box(2,2,2)",
+                "results": [{"id": "example1"}],
+                "used": True
+            }
+        monkeypatch.setattr(model_service.rag_service, "retrieve_context", mock_retrieve_context)
+        
+        chunks = []
+        async for chunk in model_service.generate_cad_code_stream(
+            prompt="make a cube",
+            model_choice=model_service.ModelChoice.QWEN
+        ):
+            chunks.append(chunk)
+        
+        # Verify RAG context was injected into prompt
+        assert len(captured_prompts) == 1
+        assert "Example CAD: cq.box(2,2,2)" in captured_prompts[0]
+        assert "make a cube" in captured_prompts[0]
 
 
 # ============================================================================

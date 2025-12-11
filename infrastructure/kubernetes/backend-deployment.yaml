@@ -1,0 +1,181 @@
+---
+# Backend API Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: backend
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 600
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: cad-coder
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: cad-coder
+        component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+    spec:
+      serviceAccountName: cad-coder-backend
+      
+      # Anti-affinity for high availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: cad-coder
+                    component: backend
+                topologyKey: kubernetes.io/hostname
+      
+      containers:
+        - name: backend
+          image: us-central1-docker.pkg.dev/cad-coder-nextgen/cad-coder-production/cad-coder-backend:latest
+          imagePullPolicy: Always
+          
+          ports:
+            - containerPort: 8000
+              name: http
+          
+          envFrom:
+            - configMapRef:
+                name: cad-coder-config
+            - secretRef:
+                name: cad-coder-secrets
+          
+          resources:
+            requests:
+              cpu: "250m" # was 500
+              memory: "512Mi" # was 1Gi
+            limits:
+              cpu: "1"
+              memory: "2Gi" # Was 4Gi
+          
+          livenessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 30 # Increased from 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 15 # Increased from 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          
+          securityContext:
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+---
+# Backend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: backend
+  annotations:
+    cloud.google.com/backend-config: '{"default": "cad-coder-backend-config"}'
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: cad-coder
+    component: backend
+---
+# Backend ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cad-coder-backend
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: backend
+  annotations:
+    # Workload Identity binding
+    iam.gke.io/gcp-service-account: cad-coder-backend@${PROJECT_ID}.iam.gserviceaccount.com
+---
+# Horizontal Pod Autoscaler for Backend
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+---
+# Pod Disruption Budget for Backend
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: backend
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app: cad-coder
+      component: backend

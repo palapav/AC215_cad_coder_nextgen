@@ -1,0 +1,40 @@
+---
+# Namespace for CAD-Coder application
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cad-coder
+  labels:
+    app: cad-coder
+    environment: production
+---
+# Resource Quota to prevent runaway costs
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: cad-coder-quota
+  namespace: cad-coder
+spec:
+  hard:
+    requests.cpu: "50"
+    requests.memory: "200Gi"
+    limits.cpu: "100"
+    limits.memory: "400Gi"
+    requests.nvidia.com/gpu: "10"
+    persistentvolumeclaims: "20"
+---
+# Limit Range for default resource limits
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: cad-coder-limits
+  namespace: cad-coder
+spec:
+  limits:
+    - default:
+        cpu: "1"
+        memory: "2Gi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "256Mi"
+      type: Container

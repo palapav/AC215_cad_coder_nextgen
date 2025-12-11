@@ -3,8 +3,11 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (ignore permission errors in read-only envs)
+try:
+    load_dotenv()
+except PermissionError:
+    pass
 
 # MongoDB setup
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongo:27017")

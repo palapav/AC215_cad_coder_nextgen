@@ -1,0 +1,81 @@
+# ============================================================================
+# ML Workflow ConfigMap
+# ============================================================================
+# Configuration for automated model retraining and validation.
+# These values control the ML workflow behavior.
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ml-workflow-config
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: ml-workflow
+data:
+  # ==========================================================================
+  # Model Configuration
+  # ==========================================================================
+  BASE_MODEL: "Qwen/Qwen3-VL-2B-Instruct"
+  MODEL_OUTPUT_DIR: "/models/output"
+  
+  # ==========================================================================
+  # Training Configuration
+  # ==========================================================================
+  NUM_EPOCHS: "1"
+  BATCH_SIZE: "1"
+  GRADIENT_ACCUMULATION_STEPS: "8"
+  LEARNING_RATE: "2e-5"
+  MAX_LEN: "2048"
+  CHECKPOINT_STEPS: "1000"
+  EVAL_STEPS: "500"
+  VAL_SAMPLES: "1000"
+  
+  # ==========================================================================
+  # Performance Thresholds for Validation
+  # ==========================================================================
+  # Models must meet ALL thresholds to be deployed
+  MIN_VALID_SAMPLE_RATE: "0.95"    # 95% minimum valid sample rate
+  MIN_MEAN_IOU: "0.50"             # 0.50 minimum mean IOU score
+  MIN_MEDIAN_IOU: "0.55"           # 0.55 minimum median IOU score
+  MAX_FAILED_GEN_RATE: "0.05"      # 5% maximum failed generation rate
+  
+  # ==========================================================================
+  # Evaluation Configuration
+  # ==========================================================================
+  EVAL_N_SAMPLES: "1"
+  EVAL_N_WORKERS: "20"
+  EVAL_TIMEOUT: "15"
+  EVAL_TEMPERATURE: "1.0"
+  EVAL_MAX_NEW_TOKENS: "4096"
+  EVAL_BATCH_SIZE: "8"
+  
+  # ==========================================================================
+  # Workflow Configuration
+  # ==========================================================================
+  # Enable/disable workflow components
+  ENABLE_PREPROCESSING: "true"
+  ENABLE_TRAINING: "true"
+  ENABLE_EVALUATION: "true"
+  ENABLE_VALIDATION: "true"
+  ENABLE_DEPLOYMENT: "true"
+  
+  # Deployment targets (comma-separated)
+  # Options: modal, gcp, both
+  DEPLOYMENT_TARGET: "modal"
+  
+  # ==========================================================================
+  # Data Paths (relative to /data mount)
+  # ==========================================================================
+  DATA_CLIENT1_PATH: "/data/partitioned/client1"
+  DATA_CLIENT2_PATH: "/data/partitioned/client2"
+  DATA_COMBINED_PATH: "/data/partitioned/combined"
+  DATA_VALIDATION_PATH: "/data/partitioned/validation"
+  DATA_TEST_PATH: "/data/partitioned/test"
+  
+  # ==========================================================================
+  # Notification Configuration
+  # ==========================================================================
+  NOTIFICATION_ENABLED: "false"
+  # SLACK_WEBHOOK_URL: ""  # Set via secret if needed
+

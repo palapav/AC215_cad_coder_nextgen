@@ -11,14 +11,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for caching
-COPY requirements.txt .
-COPY requirements-test.txt .
+# Install pip and upgrade
+RUN pip install --no-cache-dir --upgrade pip
 
-# Install dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -r requirements-test.txt
+# Install main application dependencies first
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install test-specific dependencies
+COPY requirements-test.txt ./
+RUN pip install --no-cache-dir -r requirements-test.txt
 
 # Copy source code
 COPY . .

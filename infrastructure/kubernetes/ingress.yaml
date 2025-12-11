@@ -1,0 +1,121 @@
+---
+# GCE Ingress Controller Configuration
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cad-coder-ingress
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+  annotations:
+    # Use GCE Ingress
+    kubernetes.io/ingress.class: "gce"
+    # Allow HTTP (will redirect to HTTPS)
+    kubernetes.io/ingress.allow-http: "true"
+    # Backend service health check configuration
+    cloud.google.com/backend-config: '{"default": "cad-coder-backend-config"}'
+    # Static IP address
+    kubernetes.io/ingress.global-static-ip-name: "cad-coder-ip"
+    # Managed certificate for HTTPS
+    networking.gke.io/managed-certificates: cad-coder-cert
+spec:
+  rules:
+    - host: cad-coder-nextgen-demo.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+
+---
+# Network Policy for defense in depth
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-network-policy
+  namespace: cad-coder
+spec:
+  podSelector:
+    matchLabels:
+      component: backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Allow traffic from frontend
+    - from:
+        - podSelector:
+            matchLabels:
+              component: frontend
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # Allow traffic to inference services
+    - to:
+        - podSelector:
+            matchLabels:
+              component: qwen-inference
+        - podSelector:
+            matchLabels:
+              component: llava-inference
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow external HTTPS (for RAG, GCS, etc.)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+---
+# Network Policy for inference services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: inference-network-policy
+  namespace: cad-coder
+spec:
+  podSelector:
+    matchLabels:
+      app: cad-coder
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only allow traffic from backend
+    - from:
+        - podSelector:
+            matchLabels:
+              component: backend
+      ports:
+        - protocol: TCP
+          port: 8080

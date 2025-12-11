@@ -1,0 +1,668 @@
+name: Deploy to GCP
+
+on:
+  # Deployment is only triggered via workflow_dispatch from CI after all checks pass
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+      deploy_infrastructure:
+        description: 'Deploy infrastructure changes'
+        required: false
+        default: false
+        type: boolean
+      deploy_models:
+        description: 'Deploy model inference services'
+        required: false
+        default: true
+        type: boolean
+      trigger_ml_workflow:
+        description: 'Trigger ML retraining workflow (disabled by default)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: us-central1
+  GCP_ZONE: us-central1-a
+  GKE_CLUSTER: cad-coder-${{ github.event.inputs.environment || 'production' }}
+  K8S_NAMESPACE: cad-coder
+
+jobs:
+  # ==========================================================================
+  # Build and Push Container Images
+  # ==========================================================================
+  build-images:
+    name: Build Container Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    
+    outputs:
+      image_tag: ${{ steps.tags.outputs.tag }}
+      artifact_registry: ${{ steps.registry.outputs.url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prune Docker builder cache
+        run: |
+          docker buildx prune -af || true
+          docker system df
+
+      - name: Docker aggressive cleanup
+        run: |
+          docker system prune -af || true
+          docker builder prune -af || true
+      
+      - name: Set Artifact Registry URL
+        id: registry
+        run: |
+          echo "url=${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cad-coder-production" >> "$GITHUB_OUTPUT"
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+      
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Generate image tags
+        id: tags
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "tag=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "date_tag=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+      
+      # Backend Image
+      - name: Build and push Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/cad_coder_backend
+          file: ./src/cad_coder_backend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.registry.outputs.url }}/cad-coder-backend:${{ steps.tags.outputs.tag }}
+            ${{ steps.registry.outputs.url }}/cad-coder-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      # Frontend Image
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/ui
+          file: ./src/ui/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.registry.outputs.url }}/cad-coder-frontend:${{ steps.tags.outputs.tag }}
+            ${{ steps.registry.outputs.url }}/cad-coder-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Free up disk space before building model images
+      - name: Free disk space for model images
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+          
+          # Remove unnecessary large packages
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          
+          # Clean apt cache
+          sudo apt-get clean
+          
+          # Clean docker
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+          
+          echo "Disk space after cleanup:"
+          df -h
+
+      # Qwen Inference Image (T4)
+      - name: Build and push Qwen inference image
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/model_inference/qwen
+          file: ./src/model_inference/qwen/Dockerfile.gke
+          push: true
+          tags: |
+            ${{ steps.registry.outputs.url }}/cad-coder-qwen-inference:${{ steps.tags.outputs.tag }}
+            ${{ steps.registry.outputs.url }}/cad-coder-qwen-inference:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # LLaVA Inference Image (A100)
+      # Note: Build context is src/model_inference to access llava module
+      - name: Build and push LLaVA inference image
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/model_inference
+          file: ./src/model_inference/llava_modal/Dockerfile.gke
+          push: true
+          tags: |
+            ${{ steps.registry.outputs.url }}/cad-coder-llava-inference:${{ steps.tags.outputs.tag }}
+            ${{ steps.registry.outputs.url }}/cad-coder-llava-inference:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Output image tags
+        run: |
+          echo "=============================================="
+          echo "Built and pushed images:"
+          echo "  Registry: ${{ steps.registry.outputs.url }}"
+          echo "  Tag: ${{ steps.tags.outputs.tag }}"
+          echo "=============================================="
+          echo "  Backend:  ${{ steps.registry.outputs.url }}/cad-coder-backend:${{ steps.tags.outputs.tag }}"
+          echo "  Frontend: ${{ steps.registry.outputs.url }}/cad-coder-frontend:${{ steps.tags.outputs.tag }}"
+
+  # ==========================================================================
+  # Deploy Model Inference (Optional - requires MODAL_TOKEN_ID/SECRET secrets)
+  # ==========================================================================
+  deploy-models:
+    name: Deploy Models (GPU Inference)
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
+    permissions:
+      contents: read
+      id-token: write
+    continue-on-error: true  # Don't fail the pipeline if model deployment fails
+    
+    steps:
+      - name: Check for credentials
+        id: check-creds
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+        run: |
+          if [ -z "$MODAL_TOKEN_ID" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "⚠️ MODAL_TOKEN_ID not configured - skipping model deployment"
+            echo "To enable, add MODAL_TOKEN_ID and MODAL_TOKEN_SECRET to repository secrets"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "✓ Credentials found"
+          fi
+      
+      - name: Checkout code
+        if: steps.check-creds.outputs.skip != 'true'
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        if: steps.check-creds.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install Modal CLI
+        if: steps.check-creds.outputs.skip != 'true'
+        run: pip install modal
+      
+      - name: Deploy Qwen Model
+        if: steps.check-creds.outputs.skip != 'true'
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          echo "Deploying Qwen model inference..."
+          modal deploy src/model_inference/qwen/modal_app.py
+      
+      - name: Deploy LLaVA Model
+        if: steps.check-creds.outputs.skip != 'true'
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          echo "Deploying LLaVA model inference..."
+          modal deploy src/model_inference/llava_modal/modal_app.py
+      
+      - name: Verify Deployments
+        if: steps.check-creds.outputs.skip != 'true'
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          echo "Verifying deployments..."
+          modal app list
+
+  # ==========================================================================
+  # Deploy Infrastructure with Pulumi
+  # ==========================================================================
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_infrastructure == 'true' }}
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install Pulumi
+        uses: pulumi/actions@v5
+      
+      - name: Install dependencies
+        working-directory: infrastructure/pulumi
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+      
+      - name: Pulumi Preview
+        working-directory: infrastructure/pulumi
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          source venv/bin/activate
+          pulumi stack select ${{ github.event.inputs.environment || 'staging' }}
+          pulumi preview
+      
+      - name: Pulumi Up
+        working-directory: infrastructure/pulumi
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          source venv/bin/activate
+          pulumi up --yes
+
+  # ==========================================================================
+  # Deploy Application to GKE
+  # ==========================================================================
+  deploy-application:
+    name: Deploy to GKE
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: https://cad-coder-nextgen-demo.com
+    
+    env:
+      ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cad-coder-production
+      IMAGE_TAG: ${{ needs.build-images.outputs.image_tag }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: 'gke-gcloud-auth-plugin'
+      
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --zone ${{ env.GCP_ZONE }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+      
+      - name: Create namespace if not exists
+        run: |
+          kubectl apply -f infrastructure/kubernetes/namespace.yaml
+      
+      - name: Deploy ConfigMaps and Secrets
+        run: |
+          # Apply ConfigMaps
+          kubectl apply -f infrastructure/kubernetes/configmap.yaml
+          
+          # Create/update secrets from GitHub Secrets
+          kubectl create secret generic cad-coder-secrets \
+            --namespace=cad-coder \
+            --from-literal=MONGO_URI="${{ secrets.MONGO_URI }}" \
+            --from-literal=HF_TOKEN="${{ secrets.HF_TOKEN }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create GCP credentials secret if available
+          if [ -n "${{ secrets.GCP_SA_KEY }}" ]; then
+            echo "${{ secrets.GCP_SA_KEY }}" | base64 -d > /tmp/key.json
+            kubectl create secret generic gcp-credentials \
+              --namespace=cad-coder \
+              --from-file=key.json=/tmp/key.json \
+              --dry-run=client -o yaml | kubectl apply -f -
+            rm -f /tmp/key.json
+          fi
+      
+      - name: Update deployment manifests with image tags
+        run: |
+          # Replace image placeholders with actual registry URL
+          find infrastructure/kubernetes -name "*.yaml" -exec \
+            sed -i "s|\${ARTIFACT_REGISTRY}|${{ env.ARTIFACT_REGISTRY }}|g" {} \;
+          
+          # Replace project ID placeholder
+          find infrastructure/kubernetes -name "*.yaml" -exec \
+            sed -i "s|\${PROJECT_ID}|${{ secrets.GCP_PROJECT_ID }}|g" {} \;
+      
+      - name: Deploy Backend
+        run: |
+          # Apply deployment manifest first
+          kubectl apply -f infrastructure/kubernetes/backend-deployment.yaml
+          
+          # Update image tag
+          kubectl set image deployment/backend \
+            backend=${{ env.ARTIFACT_REGISTRY }}/cad-coder-backend:${{ env.IMAGE_TAG }} \
+            --namespace=${{ env.K8S_NAMESPACE }}
+      
+      - name: Deploy Frontend
+        run: |
+          # Apply deployment manifest first
+          kubectl apply -f infrastructure/kubernetes/frontend-deployment.yaml
+          
+          # Update image tag
+          kubectl set image deployment/frontend \
+            frontend=${{ env.ARTIFACT_REGISTRY }}/cad-coder-frontend:${{ env.IMAGE_TAG }} \
+            --namespace=${{ env.K8S_NAMESPACE }}
+      
+      - name: Deploy Inference Services (Qwen + LLaVA)
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_models == 'true') }}
+        run: |
+          kubectl apply -f infrastructure/kubernetes/qwen-inference-deployment.yaml
+          kubectl apply -f infrastructure/kubernetes/llava-inference-deployment.yaml
+
+          kubectl set image deployment/qwen-inference \
+            qwen-inference=${{ env.ARTIFACT_REGISTRY }}/cad-coder-qwen-inference:${{ env.IMAGE_TAG }} \
+            --namespace=${{ env.K8S_NAMESPACE }}
+
+          kubectl set image deployment/llava-inference \
+            llava-inference=${{ env.ARTIFACT_REGISTRY }}/cad-coder-llava-inference:${{ env.IMAGE_TAG }} \
+            --namespace=${{ env.K8S_NAMESPACE }}
+      
+      - name: Deploy Ingress
+        run: |
+          kubectl apply -f infrastructure/kubernetes/ingress.yaml
+      
+      - name: Wait for deployments
+        run: |
+          echo "Waiting for backend deployment..."
+          kubectl rollout status deployment/backend --namespace=cad-coder --timeout=180s
+          
+          echo "Waiting for frontend deployment..."
+          kubectl rollout status deployment/frontend --namespace=cad-coder --timeout=180s
+          
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event.inputs.deploy_models }}" = "true" ]; then
+            echo "Waiting for Qwen inference deployment..."
+            kubectl rollout status deployment/qwen-inference --namespace=cad-coder --timeout=600s || true
+            echo "Waiting for LLaVA inference deployment..."
+            kubectl rollout status deployment/llava-inference --namespace=cad-coder --timeout=900s || true
+          fi
+
+      - name: Collect rollout diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== Deployments ==="
+          kubectl get deploy -n cad-coder -o wide || true
+          echo "=== Pods ==="
+          kubectl get pods -n cad-coder -o wide || true
+          echo "=== Backend describe ==="
+          kubectl describe deploy/backend -n cad-coder || true
+          echo "=== Frontend describe ==="
+          kubectl describe deploy/frontend -n cad-coder || true
+          echo "=== Recent backend pod events ==="
+          kubectl get events -n cad-coder --sort-by=.lastTimestamp | tail -n 50 || true
+          echo "=== Backend pod logs (most recent) ==="
+          kubectl logs -n cad-coder deploy/backend --tail=200 || true
+          echo "=== Frontend pod logs (most recent) ==="
+          kubectl logs -n cad-coder deploy/frontend --tail=200 || true
+      
+      - name: Verify deployment
+        run: |
+          echo "=============================================="
+          echo "           DEPLOYMENT STATUS"
+          echo "=============================================="
+          echo ""
+          echo "=== Deployments ==="
+          kubectl get deployments -n cad-coder
+          echo ""
+          echo "=== Pods ==="
+          kubectl get pods -n cad-coder
+          echo ""
+          echo "=== Services ==="
+          kubectl get services -n cad-coder
+          echo ""
+          echo "=== Ingress ==="
+          kubectl get ingress -n cad-coder
+          echo ""
+          echo "=== HPAs ==="
+          kubectl get hpa -n cad-coder
+          echo "=============================================="
+
+  # ==========================================================================
+  # Deploy ML Workflow Resources (Optional)
+  # ==========================================================================
+  deploy-ml-workflow:
+    name: Deploy ML Workflow
+    runs-on: ubuntu-latest
+    needs: [deploy-application]
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.trigger_ml_workflow == 'true' }}
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: 'gke-gcloud-auth-plugin'
+      
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --zone ${{ env.GCP_ZONE }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+      
+      - name: Deploy ML Workflow Resources
+        run: |
+          echo "Deploying ML Workflow resources..."
+          
+          # Apply ML workflow ConfigMap, RBAC, and CronJob
+          kubectl apply -f infrastructure/kubernetes/ml-workflow/configmap.yaml
+          kubectl apply -f infrastructure/kubernetes/ml-workflow/rbac.yaml
+          kubectl apply -f infrastructure/kubernetes/ml-workflow/retraining-cronjob.yaml
+          
+          # Note: PVCs are optional and may already exist
+          kubectl apply -f infrastructure/kubernetes/ml-workflow/pvc.yaml || true
+          
+          echo "✓ ML Workflow resources deployed"
+          echo ""
+          echo "Note: CronJob is suspended by default."
+          echo "To enable scheduled retraining:"
+          echo "  kubectl patch cronjob ml-retraining-job -n cad-coder -p '{\"spec\":{\"suspend\":false}}'"
+      
+      - name: Trigger Manual Retraining Job
+        if: ${{ github.event.inputs.trigger_ml_workflow == 'true' }}
+        run: |
+          echo "Creating manual retraining job..."
+          
+          # Create a one-off job from the CronJob template
+          JOB_NAME="ml-retrain-$(date +%s)"
+          kubectl create job $JOB_NAME \
+            --from=cronjob/ml-retraining-job \
+            -n cad-coder || echo "Note: Job creation may fail if CronJob doesn't exist yet"
+          
+          echo "✓ Manual retraining job triggered: $JOB_NAME"
+          echo ""
+          echo "Monitor with: kubectl logs -f job/$JOB_NAME -n cad-coder"
+
+  # ==========================================================================
+  # Run Smoke Tests
+  # ==========================================================================
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: [deploy-application]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install test dependencies
+        run: |
+          pip install httpx pytest pytest-asyncio
+      
+      - name: Run smoke tests
+        env:
+          API_URL: ${{ secrets.API_URL }}
+        run: |
+          # Wait for services to be ready
+          echo "Waiting for services to be ready..."
+          sleep 30
+          
+          # Skip if no API_URL is configured
+          if [ -z "${API_URL}" ]; then
+            echo "API_URL not configured, skipping smoke tests"
+            exit 0
+          fi
+          
+          # Health check with retries
+          echo "Running health check..."
+          for i in 1 2 3 4 5; do
+            if curl -sf "${API_URL}/health" > /dev/null; then
+              echo "✓ Health check passed"
+              break
+            fi
+            echo "Health check attempt $i failed, retrying..."
+            sleep 10
+          done
+          
+          # Basic endpoint tests
+          python -c "
+          import httpx
+          import os
+          import sys
+          
+          api_url = os.environ.get('API_URL')
+          if not api_url:
+              print('API_URL not set, skipping tests')
+              sys.exit(0)
+          
+          print(f'Testing API at: {api_url}')
+          
+          # Test health endpoint
+          try:
+              r = httpx.get(f'{api_url}/health', timeout=30)
+              assert r.status_code == 200, f'Health check failed: {r.status_code}'
+              print('✓ Health check passed')
+          except Exception as e:
+              print(f'✗ Health check failed: {e}')
+              sys.exit(1)
+          
+          # Test root endpoint
+          try:
+              r = httpx.get(f'{api_url}/', timeout=30)
+              assert r.status_code == 200, f'Root endpoint failed: {r.status_code}'
+              print('✓ Root endpoint passed')
+          except Exception as e:
+              print(f'✗ Root endpoint failed: {e}')
+              sys.exit(1)
+          
+          print('')
+          print('============================================')
+          print('All smoke tests passed!')
+          print('============================================')
+          "
+
+  # ==========================================================================
+  # Notify on Completion
+  # ==========================================================================
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [smoke-tests]
+    if: always()
+    
+    steps:
+      - name: Deployment Summary
+        run: |
+          echo "=============================================="
+          echo "           DEPLOYMENT SUMMARY"
+          echo "=============================================="
+          echo ""
+          echo "Environment: ${{ github.event.inputs.environment || 'staging' }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo ""
+          
+          if [ "${{ needs.smoke-tests.result }}" == "success" ]; then
+            echo "Status: ✅ SUCCESS"
+          else
+            echo "Status: ❌ FAILED"
+            echo ""
+            echo "Check the workflow logs for details."
+          fi
+          echo "=============================================="
+      
+      - name: Create GitHub Deployment Status
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Log success
+            console.log('✅ Deployment completed successfully!');
+            console.log(`Environment: ${{ github.event.inputs.environment || 'staging' }}`);
+            console.log(`Commit: ${{ github.sha }}`);

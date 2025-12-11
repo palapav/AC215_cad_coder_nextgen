@@ -1,0 +1,40 @@
+# Docker Compose for Load Testing
+# Usage:
+#   docker compose up --scale worker=4
+#   Then visit http://localhost:8089
+
+services:
+  master:
+    build: .
+    ports:
+      - "8089:8089"
+    environment:
+      - LOCUST_HOST=${LOCUST_HOST:-http://backend:8000}
+      - LOCUST_LOCUSTFILE=/app/locustfile.py
+    command: >
+      locust -f /app/locustfile.py
+      --master
+      --web-host=0.0.0.0
+      --host=${LOCUST_HOST:-http://backend:8000}
+    networks:
+      - load-test
+
+  worker:
+    build: .
+    environment:
+      - LOCUST_HOST=${LOCUST_HOST:-http://backend:8000}
+      - LOCUST_LOCUSTFILE=/app/locustfile.py
+    command: >
+      locust -f /app/locustfile.py
+      --worker
+      --master-host=master
+    depends_on:
+      - master
+    networks:
+      - load-test
+    deploy:
+      replicas: 4
+
+networks:
+  load-test:
+    driver: bridge

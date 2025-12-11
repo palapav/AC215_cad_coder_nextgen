@@ -1,0 +1,99 @@
+---
+# Kubernetes Job for running load tests against the CAD-Coder deployment
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cad-coder-load-test
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: load-test
+spec:
+  ttlSecondsAfterFinished: 3600  # Clean up after 1 hour
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: cad-coder
+        component: load-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: locust
+          image: ${ARTIFACT_REGISTRY}/cad-coder-load-test:latest
+          command:
+            - locust
+            - -f
+            - /app/locustfile.py
+            - --headless
+            - --host=http://backend:8000
+            - -u
+            - "50"       # 50 concurrent users
+            - -r
+            - "5"        # Spawn 5 users per second
+            - -t
+            - "5m"       # Run for 5 minutes
+            - --csv=/results/load_test
+            - --html=/results/load_test_report.html
+          env:
+            - name: LOCUST_HOST
+              value: "http://backend:8000"
+          volumeMounts:
+            - name: results
+              mountPath: /results
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: results
+          emptyDir: {}
+---
+# CronJob for scheduled load testing
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cad-coder-scheduled-load-test
+  namespace: cad-coder
+  labels:
+    app: cad-coder
+    component: load-test
+spec:
+  schedule: "0 2 * * *"  # Run daily at 2 AM
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400  # Clean up after 24 hours
+      template:
+        metadata:
+          labels:
+            app: cad-coder
+            component: load-test
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: locust
+              image: ${ARTIFACT_REGISTRY}/cad-coder-load-test:latest
+              command:
+                - locust
+                - -f
+                - /app/locustfile.py
+                - --headless
+                - --host=http://backend:8000
+                - -u
+                - "100"
+                - -r
+                - "10"
+                - -t
+                - "10m"
+                - --csv=/results/scheduled_load_test
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "2"
+                  memory: "2Gi"

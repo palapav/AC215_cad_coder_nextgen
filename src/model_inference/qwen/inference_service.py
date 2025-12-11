@@ -3,12 +3,13 @@
 import os
 import torch
 from PIL import Image
-from transformers import AutoProcessor
+from transformers import AutoProcessor, TextIteratorStreamer
 from qwen_vl_utils import process_vision_info
 from model_utils import load_model, load_checkpoint_into_model
 from pathlib import Path
 import io
 import base64
+import threading
 
 # Global model and processor (loaded once)
 _model = None
@@ -224,4 +225,80 @@ def generate_cad_code(
     print(f"[Qwen Service] First 500 chars: {generated_text[:500]}")
     
     return generated_text.strip()
+
+
+def generate_cad_code_stream(
+    prompt: str,
+    image=None,
+    image_path: str = None,
+    max_new_tokens: int = 4096,
+    temperature: float = 1.0,
+):
+    """
+    Stream CAD code tokens as they are generated.
+    Uses the same preprocessing as generate_cad_code but yields text chunks.
+    """
+    global _model, _processor
+    if _model is None or _processor is None:
+        raise RuntimeError("Model not initialized. Call initialize_model() first.")
+
+    if not prompt or not prompt.strip():
+        if image is None and image_path is None:
+            raise ValueError("Prompt cannot be empty for text-only generation")
+        prompt = "Generate the CADQuery code needed to create the CAD for the provided image."
+
+    if image is None and image_path:
+        if os.path.exists(image_path):
+            image = Image.open(image_path).convert("RGB")
+        else:
+            raise FileNotFoundError(f"Image not found: {image_path}")
+
+    if image is not None:
+        messages = [[{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}]}]]
+    else:
+        messages = [[{"role": "user", "content": [{"type": "text", "text": prompt}]}]]
+
+    _model.eval()
+    texts = _processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    image_inputs, video_inputs = process_vision_info(messages)
+
+    processor_kwargs = {"text": texts, "padding": True, "return_tensors": "pt"}
+    if image_inputs:
+        processor_kwargs["images"] = image_inputs
+    if video_inputs:
+        processor_kwargs["videos"] = video_inputs
+
+    inputs = _processor(**processor_kwargs)
+    device = _model.device if hasattr(_model, "device") else next(_model.parameters()).device
+    inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+
+    streamer = TextIteratorStreamer(
+        _processor.tokenizer,
+        skip_prompt=True,
+        skip_special_tokens=True,
+    )
+
+    generation_kwargs = {
+        "max_new_tokens": max_new_tokens,
+        "use_cache": True,
+        "pad_token_id": _processor.tokenizer.pad_token_id or _processor.tokenizer.eos_token_id,
+        "do_sample": False,
+        "streamer": streamer,
+    }
+
+    if torch.cuda.is_available():
+        try:
+            torch.cuda.synchronize()
+        except RuntimeError:
+            pass
+
+    def _generate():
+        with torch.inference_mode():
+            _model.generate(**inputs, **generation_kwargs)
+
+    thread = threading.Thread(target=_generate, daemon=True)
+    thread.start()
+
+    for text in streamer:
+        yield text
 

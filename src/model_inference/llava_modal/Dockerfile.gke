@@ -1,0 +1,89 @@
+# =============================================================================
+# LLaVA Inference Service Dockerfile for GKE GPU Deployment
+# =============================================================================
+# This Dockerfile creates a production-ready inference service for the
+# CAD-Coder LLaVA model running on GKE with A100 GPUs.
+#
+# Build context should be src/model_inference (not llava_modal) to access
+# the llava module. Use: -f llava_modal/Dockerfile.gke
+#
+# Note: flash-attn and vllm removed to avoid compilation issues on CI runners.
+
+# Base image with CUDA and PyTorch (LLaVA requires specific versions)
+FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    HF_HOME=/models/hf_cache \
+    TRANSFORMERS_CACHE=/models/hf_cache \
+    # Disable flash attention - use eager attention instead
+    TRANSFORMERS_NO_FLASH_ATTENTION=1
+
+# Install system dependencies (minimal)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create non-root user for security
+RUN useradd -m -u 1000 inference && \
+    mkdir -p /app /models/hf_cache && \
+    chown -R inference:inference /app /models
+
+WORKDIR /app
+
+# Install Python dependencies in stages
+# Core ML dependencies first
+RUN pip install --no-cache-dir \
+    torch==2.1.2 \
+    torchvision==0.16.2 \
+    transformers==4.37.2 \
+    tokenizers==0.15.1 \
+    sentencepiece==0.1.99 \
+    accelerate==0.21.0 \
+    peft \
+    bitsandbytes
+
+# LLaVA specific dependencies
+RUN pip install --no-cache-dir \
+    einops==0.6.1 \
+    einops-exts==0.0.4 \
+    timm==0.6.13 \
+    shortuuid
+
+# Web server and utilities
+RUN pip install --no-cache-dir \
+    fastapi>=0.110.0 \
+    "uvicorn[standard]>=0.27.0" \
+    python-multipart>=0.0.9 \
+    pillow>=10.0.0 \
+    numpy>=1.24.0 \
+    pydantic>=2.0.0 \
+    httpx>=0.27.0 \
+    aiofiles>=23.0.0 \
+    requests \
+    prometheus-client>=0.19.0
+
+# Copy LLaVA module from parent directory (build context is src/model_inference)
+COPY --chown=inference:inference llava /app/llava/
+
+# Copy inference code from llava_modal subdirectory
+COPY --chown=inference:inference llava_modal/preprocessing.py /app/
+COPY --chown=inference:inference llava_modal/gke_server.py /app/
+
+# Switch to non-root user
+USER inference
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=600s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the inference server
+CMD ["python", "gke_server.py"]

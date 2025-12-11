@@ -5,8 +5,9 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./tests:/app/tests:ro
+      - ./ml_workflow:/app/ml_workflow:ro
       - ./coverage:/app/coverage
     environment:
-      - PYTHONPATH=/app:/app/CADRL
-    command: pytest tests/ -v --cov=. --cov-report=term-missing --cov-report=xml:/app/coverage/model_finetuning.xml
+      - PYTHONPATH=/app:/app/CADRL:/app/ml_workflow
+    command: pytest tests/ -v --cov=. --cov=ml_workflow --cov-report=term-missing --cov-report=xml:/app/coverage/model_finetuning.xml
 

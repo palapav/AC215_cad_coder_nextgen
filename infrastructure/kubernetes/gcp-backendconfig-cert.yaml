@@ -1,0 +1,73 @@
+---
+# Backend Config for GCE Load Balancer (Backend)
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: cad-coder-backend-config
+  namespace: cad-coder
+spec:
+  healthCheck:
+    checkIntervalSec: 30
+    timeoutSec: 10
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    type: HTTP
+    requestPath: /api/health/
+    port: 8000
+  
+  # Connection draining
+  connectionDraining:
+    drainingTimeoutSec: 60
+  
+  # Timeout settings (long for inference)
+  timeoutSec: 300
+  
+  # Session affinity (useful for long-running inference requests)
+  sessionAffinity:
+    affinityType: "CLIENT_IP"
+    affinityCookieTtlSec: 3600
+  
+  # Cloud CDN for static assets (optional)
+  cdn:
+    enabled: false
+  
+  # Cloud Armor security policy (optional)
+  # securityPolicy:
+  #   name: "cad-coder-security-policy"
+---
+# Managed SSL Certificate
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: cad-coder-cert
+  namespace: cad-coder
+spec:
+  domains:
+    - cad-coder.example.com
+    - api.cad-coder.example.com
+---
+# Frontend Backend Config (static content, CDN-enabled)
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: frontend-backend-config
+  namespace: cad-coder
+spec:
+  healthCheck:
+    checkIntervalSec: 30
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    type: HTTP
+    requestPath: /
+    port: 80
+  
+  timeoutSec: 30
+  
+  # Enable CDN for static assets
+  cdn:
+    enabled: true
+    cachePolicy:
+      includeHost: true
+      includeProtocol: true
+      includeQueryString: false
