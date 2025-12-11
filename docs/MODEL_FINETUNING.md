@@ -103,9 +103,8 @@ We deploy the **2B Qwen3-VL-Instruct** model in production (Modal Labs) because:
 
 | Phase | Model | Infrastructure | Use Case |
 |-------|-------|----------------|----------|
-| **Current** | 2B | Modal Labs (A10G) | Production baseline |
-| **Next** | 8B | GKE/Vertex AI (A100) | Premium tier |
-| **Future** | 8B + Quantization | Modal Labs (A10G) | Cost-optimized premium |
+| **Current** | 2B | Modal Labs/GKE (A10G) | Production baseline |
+Cost-optimized premium |
 
 ### Scaling Considerations
 

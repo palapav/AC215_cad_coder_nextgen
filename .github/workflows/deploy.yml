@@ -1,7 +1,12 @@
 name: Deploy to GCP
 
 on:
-  # Deployment is only triggered via workflow_dispatch from CI after all checks pass
+  # Automatic: when CI workflow completes successfully on main
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+  # Manual override
   workflow_dispatch:
     inputs:
       environment:
