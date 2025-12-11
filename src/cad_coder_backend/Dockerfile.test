@@ -11,8 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pip and test requirements
+# Install pip and upgrade
 RUN pip install --no-cache-dir --upgrade pip
+
+# Install main application dependencies first
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install test-specific dependencies
 COPY requirements-test.txt ./
 RUN pip install --no-cache-dir -r requirements-test.txt
 

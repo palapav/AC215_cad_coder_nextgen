@@ -276,8 +276,8 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [backend-tests, lint-frontend]
-    # Always run E2E tests (they use mocked backends by default, so no credentials needed)
-    if: always()
+    # Only run E2E tests if backend tests passed
+    if: ${{ needs.backend-tests.result == 'success' }}
     
     steps:
       - uses: actions/checkout@v4
@@ -403,13 +403,20 @@ jobs:
           fi
 
   # ============================================================================
-  # TRIGGER DEPLOYMENT (on main branch only)
+  # TRIGGER DEPLOYMENT (on main branch only, after ALL CI passes)
   # ============================================================================
   trigger-deploy:
     name: Trigger Deployment
     runs-on: ubuntu-latest
-    needs: [coverage-summary, e2e-tests, docker-build]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [coverage-summary, e2e-tests, docker-build, backend-tests, model-finetuning-tests, ui-tests]
+    # Only trigger deployment if ALL required jobs succeeded AND we're on main branch
+    if: |
+      github.ref == 'refs/heads/main' && 
+      github.event_name == 'push' &&
+      needs.coverage-summary.result == 'success' &&
+      needs.backend-tests.result == 'success' &&
+      needs.model-finetuning-tests.result == 'success' &&
+      needs.ui-tests.result == 'success'
     
     steps:
       - name: Trigger deployment workflow
@@ -427,4 +434,4 @@ jobs:
                 deploy_models: 'false'
               }
             });
-            console.log('Deployment workflow triggered for staging environment');
+            console.log('Deployment workflow triggered - all CI checks passed');
