@@ -72,6 +72,12 @@ async def api_root():
 
 app.include_router(api_router)
 
+# Also expose routers without the /api prefix for backward compatibility in tests
+app.include_router(generate.router)
+app.include_router(history.router)
+app.include_router(health.router)
+app.include_router(pipeline.router)
+
 # ---------- Root Endpoint ----------
 @app.get("/")
 async def root():

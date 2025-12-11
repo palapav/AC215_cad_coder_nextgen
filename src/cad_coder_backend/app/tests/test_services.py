@@ -47,8 +47,8 @@ class TestModelService:
         """Test that generate_cad_code returns expected dict structure."""
         from app.services import model_service
         
-        # Mock the Modal inference functions
-        with patch.object(model_service, '_run_llava_via_modal', new_callable=AsyncMock) as mock_llava:
+        # Mock the inference functions
+        with patch.object(model_service, '_run_llava_inference', new_callable=AsyncMock) as mock_llava:
             mock_llava.return_value = "import cadquery as cq\nresult = cq.Workplane('XY').box(1,1,1)"
             
             result = await model_service.generate_cad_code(
@@ -67,7 +67,7 @@ class TestModelService:
         """Test model choice normalization."""
         from app.services import model_service
         
-        with patch.object(model_service, '_run_llava_via_modal', new_callable=AsyncMock) as mock_llava:
+        with patch.object(model_service, '_run_llava_inference', new_callable=AsyncMock) as mock_llava:
             mock_llava.return_value = "# test code"
             
             # Test with enum
@@ -82,7 +82,7 @@ class TestModelService:
         """Test that invalid model choice defaults to LLaVA."""
         from app.services import model_service
         
-        with patch.object(model_service, '_run_llava_via_modal', new_callable=AsyncMock) as mock_llava:
+        with patch.object(model_service, '_run_llava_inference', new_callable=AsyncMock) as mock_llava:
             mock_llava.return_value = "# llava code"
             
             result = await model_service.generate_cad_code(
@@ -99,7 +99,9 @@ class TestModelService:
         from app.services import model_service
 
         async_mock = AsyncMock(return_value="# generated code")
-        monkeypatch.setattr(model_service, "_run_qwen_via_modal", async_mock)
+        monkeypatch.setattr(model_service, "_run_qwen_inference", async_mock)
+        async_mock = AsyncMock(return_value="# generated code")
+        monkeypatch.setattr(model_service, "_run_qwen_inference", async_mock)
 
         def mock_retrieve_context(**kwargs):
             return {
@@ -686,13 +688,9 @@ class TestStreamingInference:
         """Test Qwen Modal streaming with mocked function."""
         from app.services.modal_client import stream_modal_qwen_inference
         
-        async def mock_gen():
-            yield "import "
-            yield "cadquery "
-            yield "as cq"
-        
+        # Return a simple list from remote_gen (sync generator expected)
         mock_fn_handle = MagicMock()
-        mock_fn_handle.remote_gen.return_value = mock_gen()
+        mock_fn_handle.remote_gen.return_value = ["import ", "cadquery ", "as cq"]
         
         monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
         monkeypatch.setenv("MODAL_TOKEN_SECRET", "test_secret")
@@ -718,12 +716,8 @@ class TestStreamingInference:
         from PIL import Image
         from app.services.modal_client import stream_modal_llava_inference
         
-        async def mock_gen():
-            yield "result = "
-            yield "cq.box(1,1,1)"
-        
         mock_fn_handle = MagicMock()
-        mock_fn_handle.remote_gen.return_value = mock_gen()
+        mock_fn_handle.remote_gen.return_value = ["result = ", "cq.box(1,1,1)"]
         
         monkeypatch.setenv("MODAL_TOKEN_ID", "test_id")
         monkeypatch.setenv("MODAL_TOKEN_SECRET", "test_secret")
