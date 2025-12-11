@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  actions: write
+
 env:
   PYTHON_VERSION_BACKEND: '3.11'
   PYTHON_VERSION_FINETUNING: '3.10'
@@ -403,25 +407,28 @@ jobs:
           fi
 
   # ============================================================================
-  # TRIGGER DEPLOYMENT (on main branch only, after ALL CI passes)
+  # TRIGGER DEPLOYMENT (main branch only, after ALL CI passes)
   # ============================================================================
   trigger-deploy:
     name: Trigger Deployment
     runs-on: ubuntu-latest
-    needs: [coverage-summary, e2e-tests, docker-build, backend-tests, model-finetuning-tests, ui-tests]
-    # Only trigger deployment if ALL required jobs succeeded AND we're on main branch
-    if: |
-      github.ref == 'refs/heads/main' && 
+    needs:
+      [coverage-summary, e2e-tests, docker-build, backend-tests, model-finetuning-tests, ui-tests]
+    permissions:
+      actions: write
+      contents: read
+    if: >
       github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
       needs.coverage-summary.result == 'success' &&
       needs.backend-tests.result == 'success' &&
       needs.model-finetuning-tests.result == 'success' &&
       needs.ui-tests.result == 'success'
-    
     steps:
       - name: Trigger deployment workflow
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,

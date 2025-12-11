@@ -4,7 +4,7 @@ This document provides comprehensive documentation for the CAD-Coder testing inf
 
 ## Overview
 
-CAD-Coder maintains a minimum **60% code coverage** threshold across all components. The testing infrastructure supports both local development and CI/CD pipelines via GitHub Actions.
+CAD-Coder maintains a minimum **60% code coverage** threshold across all components. The testing infrastructure supports both local development and CI/CD pipelines via GitHub Actions. Current combined coverage (CI): **61.4%**.
 
 ### Test Categories
 
@@ -87,7 +87,7 @@ The CI pipeline (`.github/workflows/ci.yml`) runs:
 5. **UI Tests**: React component and hook tests
 6. **Coverage Aggregation**: Combines all coverage reports and enforces 60% threshold
 
-## Test Coverage by Component
+## Test Coverage by Component (latest CI)
 
 ### Backend (`src/cad_coder_backend`)
 
@@ -95,14 +95,14 @@ The CI pipeline (`.github/workflows/ci.yml`) runs:
 
 | Module | Coverage | Description |
 |--------|----------|-------------|
-| `services/model_service.py` | ~85% | Model inference routing and RAG integration |
-| `services/modal_client.py` | ~90% | Modal Labs client with image serialization |
-| `services/gke_client.py` | ~80% | GKE inference client with HTTP pooling |
-| `services/rag_service.py` | ~85% | RAG retrieval and context preparation |
-| `services/db_service.py` | ~90% | MongoDB operations |
-| `services/auth_service.py` | ~95% | Google OAuth token verification |
-| `services/utils.py` | ~95% | Environment and logging utilities |
-| `routers/*.py` | ~75% | FastAPI endpoint handlers |
+| `services/model_service.py` | ~69% | Model inference routing and RAG integration |
+| `services/modal_client.py` | ~69% | Modal Labs client with image serialization/streaming |
+| `services/gke_client.py` | ~59% | GKE inference client with HTTP pooling |
+| `services/rag_service.py` | ~41% | RAG retrieval and context prep (disabled/edge paths covered) |
+| `services/db_service.py` | ~86% | MongoDB operations |
+| `services/auth_service.py` | ~100% | Google OAuth token verification |
+| `services/utils.py` | ~43% | Env/logging utilities |
+| `routers/*.py` | ~54–94% | FastAPI endpoint handlers (health/generate/history/pipeline/auth) |
 
 #### Streaming Inference Tests
 
@@ -120,44 +120,46 @@ async def test_stream_gke_qwen_inference():
     ...
 ```
 
-#### Partially Covered (<60%)
+#### Partially Covered / Not-Critical (<60%)
 
-| Module | Coverage | Reason |
-|--------|----------|--------|
-| `main.py` | ~40% | Application startup, requires running server |
-| `routers/auth.py` | ~50% | OAuth flow requires real credentials |
+| Module | Coverage | Reason why not critical to exceed 60% |
+|--------|----------|---------------------------------------|
+| `main.py` | ~40% | Startup wiring/CORS; exercised indirectly by router tests; low business logic risk |
+| `routers/auth.py` | ~50% | OAuth flow depends on external Google credentials; core path validated via auth_service tests |
 
 ### Model Fine-tuning (`src/model_finetuning`)
 
-#### Covered Modules
+#### Covered Modules (key ones; overall ~47%)
 
 | Module | Coverage | Description |
 |--------|----------|-------------|
 | `ml_workflow/config.py` | ~100% | Configuration constants |
 | `ml_workflow/validation.py` | ~95% | Model performance validation |
-| `ml_workflow/deployment.py` | ~90% | Deployment to GKE/Modal Labs |
-| `ml_workflow/gcp_trigger_mock.py` | ~95% | GCP trigger simulation |
-| `ml_workflow/orchestrator.py` | ~80% | Workflow orchestration |
+| `ml_workflow/deployment.py` | ~100% | Deployment to GKE/Modal Labs (mocked) |
+| `ml_workflow/gcp_trigger_mock.py` | ~93% | GCP trigger simulation |
+| `ml_workflow/orchestrator.py` | ~40% | Workflow orchestration; core control flow covered, heavy/train steps mocked |
 | `tests/test_config.py` | N/A | Config validation tests |
 | `tests/test_datasets.py` | N/A | Dataset loading tests |
 | `tests/test_training_utils.py` | N/A | Training utility tests |
 
-#### Not Covered (Requires GPU)
+#### Not Covered / Low-Criticality (requires GPU or heavy runtime)
 
-| Module | Reason |
-|--------|--------|
-| `centralized_train.py` | Requires GPU for actual training |
-| `evaluate_model.py` | Requires GPU for model inference |
-| `CADRL/*.py` | Heavy model loading, GPU required |
+| Module | Reason why not critical beyond current threshold |
+|--------|-----------------------------------------------|
+| `centralized_train.py` | GPU training pipeline; unsafe/slow in CI; validated indirectly via orchestrator mocks |
+| `evaluate_model.py` | GPU inference; CI exercises validation logic via mocks instead |
+| `CADRL/*.py` | Model architecture/loading; GPU-bound; outside CI scope |
+| `modal_workflow.py` | Modal deployment image build; integration validated by mocks in tests; real run is external |
 
 ### Data Versioning (`src/data_versioning`)
 
-#### Covered Modules
+#### Covered Modules (now ~95%)
 
 | Module | Coverage | Description |
 |--------|----------|-------------|
-| `scripts/convert_raw_to_jsonl.py` | ~90% | Raw data conversion |
-| `scripts/prepare_user_data.py` | ~90% | User data preparation |
+| `scripts/convert_raw_to_jsonl.py` | ~99% | Raw data conversion (incl. CLI) |
+| `scripts/prepare_user_data.py` | ~99% | User data preparation (incl. CLI) |
+| `scripts/create_v2.py` | ~100% | Combine v1 + user data (incl. CLI) |
 
 ### Data Pipeline (`src/datapipeline`)
 
