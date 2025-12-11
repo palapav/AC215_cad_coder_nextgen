@@ -311,7 +311,15 @@ RAG_DEPLOYED_INDEX_ID=your-deployed-index-id
 ```
 
 ## Milestone5: Final Project Delivery
-Here, we will document all final project delivery deliverables. 
+Final delivery evidence (see `docs/screenshots/` for labeled images):
+
+- **Infrastructure & Deployments:** `milestone5_pulumi_iaas.png` (Pulumi IaC), `milestone5_gke.png` (GKE cluster), `milestone5_ui_deployed_https.png`, `milestone5_backend_deployment_https.png` (frontend/backend live over HTTPS).
+- **Model Inference & Streaming:** `milestone5_qwen_inference.png`, `milestone5_llava_inference.png`, `milestone5_model_token_streaming.png` (streaming outputs).
+- **CI/CD & Coverage:** `milestone5_CI.png` (CI), `milestone5_CD.png` (CD trigger), `milestone5_60%_code_coverage.png` (coverage ≥60%). Detailed in `docs/TESTING.md`.
+- **Load Testing & Ops:** `milestone5_some_k8s_load_testing.png` (K8s load test setup and evidence). Much more detailed notes in `infrastructure/kubernetes/load-testing/` (please check it out).
+- **ML Workflow:** `milestone5_ml_workflow_test_run.png` (GKE CronJob/ConfigMap run). See `docs/MODEL_FINETUNING.md` and `infrastructure/kubernetes/ml-workflow/` for workflow resources.
+
+For fuller context, refer to `README.md` (architecture, quickstart, deployment) and `docs/TESTING.md` (coverage, test matrix). RAG and MongoDB features remain documented in Milestone 4 screenshots.
 
 
 

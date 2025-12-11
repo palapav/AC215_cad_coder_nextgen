@@ -199,5 +199,5 @@ docker compose -f docker-compose.test.yml run --rm test
 ## Support / Contributions
 - CI must pass with coverage ≥60%.
 - Follow existing patterns for mocks in tests to avoid external calls.
-- Prefer Modal for inference unless GKE GPUs are available.
+- Prefer Modal for inference (easier to setup) unless GKE GPUs are available.
 

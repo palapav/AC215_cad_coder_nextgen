@@ -1,36 +1,44 @@
-# Model Fine-Tuning: Qwen3-VL for CAD Code Generation
+## Qwen3-VL Fine-Tuning Results on the GenCAD-Code Dataset
+
+> **Note:** Results are preliminary and part of ongoing research on scaling Qwen3-VL models for CAD code generation. LoRA training logs are excluded from the repository because they relate to an in-progress study. Additionally, please take a look at the ../src/model_finetuning folder for more details.
 
 ## Overview
 
-This document describes the fine-tuning process for Qwen3-VL Vision-Language Models on the GenCAD-Code dataset for CAD code generation. We fine-tuned three model variants (2B, 4B, 8B parameters) using full fine-tuning on NVIDIA H100 GPUs.
+This document summarizes fine-tuning for the Qwen3-VL 2B, 4B, and 8B models on the GenCAD-Code dataset for CAD code generation. Both full fine-tuning and LoRA training were evaluated to understand performance, scaling, and stability.
 
-## Training Process
+---
 
-### Dataset
+# **Dataset**
 
-- **Dataset**: GenCAD-Code (Version 1 - static baseline from DVC)
-- **Total Samples**: 147,289 training samples
-- **Validation**: 500 subsampled examples (for efficiency)
-- **Format**: Image-to-CADQuery code pairs in JSONL format
+* **Dataset:** GenCAD-Code (Version 1 via DVC)
+* **Training Samples:** 147,289
+* **Validation Set:** 500 held-out samples
+* **Format:** Image → CADQuery (JSONL)
 
-### Model Variants
+---
 
-| Model | Parameters | GPU Memory | Training Time |
-|-------|------------|------------|---------------|
-| Qwen3-VL-2B-Instruct | 2 billion | ~16 GB | ~5 hours |
-| Qwen3-VL-4B-Instruct | 4 billion | ~32 GB | ~8 hours |
-| Qwen3-VL-8B-Instruct | 8 billion | ~64 GB | ~15 hours |
+# **Model Variants & Training Configuration**
 
-### Training Configuration
+## **Model Sizes**
+
+| Model                | Parameters | Approx GPU Memory | Training Time |
+| -------------------- | ---------- | ----------------- | ------------- |
+| Qwen3-VL-2B-Instruct | 2B         | ~16 GB            | ~5 hours      |
+| Qwen3-VL-4B-Instruct | 4B         | ~32 GB            | ~8 hours      |
+| Qwen3-VL-8B-Instruct | 8B         | ~64 GB            | ~15 hours     |
+
+---
+
+## **Training Setup**
 
 ```yaml
 Hardware:
-  GPUs: 4x NVIDIA H100 80GB HBM3
+  GPUs: 4× NVIDIA H100 80GB
   CUDA: 12.4
   Framework: PyTorch 2.6.0
 
 Hyperparameters:
-  Epochs: 1
+  Epochs: 1 (Full FT), 3 (LoRA)
   Batch size per GPU: 4
   Gradient accumulation: 16
   Effective batch size: 256
@@ -41,184 +49,167 @@ Hyperparameters:
   Max sequence length: 4096
 
 Model Configuration:
-  Vision encoder: Frozen (only language model trained)
+  Vision encoder: Frozen
   Precision: bfloat16
   Optimizer: AdamW
   Scheduler: Constant with warmup
+  Distributed: FSDP
 ```
 
-### Training Pipeline
+---
 
-1. **Data Loading**: Combined training dataset loaded from partitioned HuggingFace format
-2. **Preprocessing**: Images processed with Qwen-VL processor; code wrapped in assistant response template
-3. **Training**: Distributed training across 4 GPUs using FSDP (Fully Sharded Data Parallel)
-4. **Validation**: Loss evaluated every 500 steps on held-out validation set
-5. **Checkpointing**: Final model saved as PyTorch checkpoint
+# **Validation Loss Results**
 
-## Results
+| Model        | Method           | Validation Loss |
+| ------------ | ---------------- | --------------- |
+| **Qwen3-2B** | LoRA (3 epochs)  | **0.081**       |
+| **Qwen3-2B** | Full Fine-tuning | **0.064**       |
+| **Qwen3-4B** | LoRA (3 epochs)  | **0.086**       |
+| **Qwen3-8B** | LoRA (3 epochs)  | **0.0699**      |
+| **Qwen3-8B** | Full Fine-tuning | **0.058**       |
 
-### Evaluation Metrics
+---
 
-We evaluate models using:
-- **Valid Sample Rate (%)**: Percentage of generated code that executes without errors
-- **Mean IOU**: Intersection over Union between generated and ground truth CAD models
-- **Median IOU**: Robust central tendency measure for IOU
-- **Mean IOU (Adjusted)**: IOU adjusted for failed samples (set to 0)
+# **Model Evaluation Results (Test100)**
 
-### Model Performance Comparison
+Below are the fine-tuning results for all Qwen3-VL models evaluated on the GenCAD-Code Test100 set.
 
-| Model | Valid Rate | Mean IOU | Median IOU | Adjusted IOU |
-|-------|------------|----------|------------|--------------|
-| **Qwen3-VL-2B** | 96.97% | 0.563 | 0.617 | 0.546 |
-| **Qwen3-VL-4B** | 97.30% | 0.586 | 0.640 | 0.567 |
-| **Qwen3-VL-8B** | 98.00% | 0.628 | 0.676 | 0.605 |
+---
 
-### Error Analysis
+## **Performance Summary**
 
-| Error Type | 2B | 4B | 8B |
-|------------|-----|-----|-----|
-| Failed Generation | 1.76% | 1.55% | 1.20% |
-| OCC Errors | 0.88% | 0.82% | 0.60% |
-| Timeouts | 0.39% | 0.38% | 0.25% |
-| None Solids | 0.00% | 0.00% | 0.00% |
+| Model           | Training Method | Valid Sample Rate (%) | Mean IOU | Adjusted IOU |
+| --------------- | --------------- | --------------------- | -------- | ------------ |
+| **Qwen3-VL-2B** | LoRA            | 89                    | 0.685    | **0.610**    |
+| **Qwen3-VL-2B** | Full FT         | 90                    | 0.715    | **0.642**    |
+| **Qwen3-VL-4B** | LoRA            | 88                    | 0.680    | **0.605**    |
+| **Qwen3-VL-8B** | LoRA            | 89                    | 0.705    | **0.630**    |
+| **Qwen3-VL-8B** | Full FT         | 91                    | 0.734    | **0.668**    |
 
-### Key Findings
+---
 
-1. **Scaling Benefits**: Larger models consistently improve both valid sample rate and IOU
-2. **Error Reduction**: 8B model reduces generation failures by 32% compared to 2B
-3. **Quality-Speed Tradeoff**: 2B offers 3x faster inference with ~10% lower IOU
-4. **High Validity**: All models achieve >96% valid code generation rate
+# **Training Curve Observations**
 
-## Deployment Implications
+### **2B Models**
 
-### Current Production Strategy
+* Full fine-tuning reaches a noticeably lower loss than LoRA.
+* Training is smooth with stable convergence.
 
-We deploy the **2B Qwen3-VL-Instruct** model in production (Modal Labs) because:
+### **4B LoRA**
 
-1. **Quality-Latency-Cost Tradeoff**: 2B offers strong performance (96.97% valid, 0.563 IOU) with significantly lower compute costs
-2. **Rapid Iteration**: Smaller model enables faster experimentation with prompts and system integration
-3. **GPU Requirements**: 2B fits on A10G GPUs (~24GB VRAM), while 8B requires A100 (~40GB)
+* Exhibits higher variance and the highest validation loss among all models.
 
-### Future Deployment Roadmap
+### **8B Models**
 
-| Phase | Model | Infrastructure | Use Case |
-|-------|-------|----------------|----------|
-| **Current** | 2B | Modal Labs/GKE (A10G) | Production baseline |
-Cost-optimized premium |
+* LoRA performs reasonably well but remains limited by adapter bottlenecks.
+* Full fine-tuning provides the strongest convergence and lowest validation loss.
 
-### Scaling Considerations
+---
 
-**For 8B Production Deployment:**
-- **Infrastructure**: GKE with high-memory GPUs or Vertex AI endpoints
-- **Optimization**: INT8/INT4 quantization to reduce VRAM requirements
-- **Serving**: vLLM or TensorRT-LLM for optimized inference
-- **Streaming**: Token streaming for improved perceived latency
+# **Deployment Implications**
 
-### Model Selection Guidelines
+## **Current Production Deployment**
 
-| Scenario | Recommended Model | Rationale |
-|----------|-------------------|-----------|
-| Cost-sensitive production | 2B | Best cost-per-request |
-| Quality-critical applications | 8B | Highest IOU and validity |
-| Real-time applications | 2B | Lowest latency |
-| Batch processing | 8B | Quality over speed |
+The **Qwen3-VL-2B Full Fine-tuned** model is currently used in production due to:
 
-## Data Versioning Integration
+1. **Best balance of latency, cost, and accuracy**
+2. Compatibility with mid-tier GPUs (A10G / L4)
+3. Fast inference and strong output consistency
+4. High validity (~90%) suitable for CAD code generation workloads
 
-### Training Data Source
+---
 
-- **Version**: V1 (original, static GenCAD-Code dataset)
-- **Tracking**: DVC (Data Version Control)
-- **Reproducibility**: Training uses exact checksummed dataset version
+## **Path Toward 8B Deployment**
 
-### Why V1 (Static Dataset)?
+| Phase       | Model        | Infra            | Purpose                             |
+| ----------- | ------------ | ---------------- | ----------------------------------- |
+| **Current** | 2B Full FT   | Modal / GKE A10G | Production baseline                 |
+| **Next**    | 8B Full FT   | A100/H100        | Quality-critical generation         |
+| **Future**  | 8B Quantized | INT4/INT8        | Production-ready high-accuracy tier |
 
-1. **Consistency**: Fine-tuning on stable baseline ensures reproducible results
-2. **Quality Control**: Original dataset is curated and validated
-3. **Comparison**: Enables fair comparison across model variants
+## **Recommended Serving Stack for 8B**
 
-### Future Retraining
+* **vLLM** (continuous batching, high throughput)
+* **TensorRT-LLM** (GPU-optimized kernels)
+* **Token streaming** for interactive UX
+* **Quantization** to reduce VRAM footprint
 
-When retraining with V2 (user-extended dataset):
-1. Pull latest dataset version: `dvc checkout`
-2. Verify data integrity: `dvc status`
-3. Update training scripts to point to V2 paths
-4. Document version in training logs
+---
 
-## Reproducibility
+# **Reproducibility**
 
-### Environment Setup
+### Training Command Example
 
 ```bash
-# Clone repository
-git clone <repo-url>
-cd cad-coder-nextgen/src/model_finetuning
-
-# Create conda environment
-conda create -n cadcoder python=3.10
-conda activate cadcoder
-
-# Install dependencies (GPU cluster)
-pip install -r requirements.txt
-```
-
-### Training Command
-
-```bash
-# 2B Model (example)
 accelerate launch --num_processes=4 centralized_train.py \
-    --base_model Qwen/Qwen3-VL-2B-Instruct \
-    --output_dir ./checkpoints/qwen3_2B \
-    --num_epochs 1 \
-    --batch_size 4 \
-    --gradient_accumulation_steps 16 \
-    --lr 2e-5 \
-    --freeze_vision \
-    --gradient_checkpointing \
-    --eval_steps 500 \
-    --log_to_wandb
+  --base_model Qwen/Qwen3-VL-2B-Instruct \
+  --output_dir checkpoints/qwen3_2B \
+  --num_epochs 1 \
+  --batch_size 4 \
+  --gradient_accumulation_steps 16 \
+  --lr 2e-5 \
+  --freeze_vision \
+  --gradient_checkpointing \
+  --eval_steps 500 \
+  --log_to_wandb
 ```
 
-### Evaluation Command
+### Evaluation Command Example
 
 ```bash
 python evaluate_model.py \
-    --model_path ./checkpoints/qwen3_2B/final_model.pt \
-    --test_data ./data/partitioned/test \
-    --output_file results/eval/qwen3_2B.json
+  --model_path checkpoints/qwen3_2B/final_model.pt \
+  --test_data data/partitioned/test \
+  --output_file results/eval/qwen3_2B.json
 ```
 
-## File Structure
+---
+
+# **Repository Structure**
 
 ```
 src/model_finetuning/
-├── centralized_train.py      # Main training script
-├── evaluate_model.py         # Full evaluation with IOU
-├── evaluate_model_minimal.py # Lightweight evaluation
-├── requirements.txt          # Dependencies
-├── finetuning.md            # (Deprecated - see this document)
-├── CADRL/                   # Core training library
-│   ├── DataUtils/           # Dataset and collator classes
-│   │   ├── Datasets.py      # CADLMDataset, MinimalImageCADDataset
-│   │   └── Collators.py     # QwenVLCollator
-│   ├── Inference/           # Evaluation utilities
-│   │   ├── Geom/            # IOU computation (OCC-based)
-│   │   ├── VLLMClient.py    # vLLM inference client
-│   │   └── IOUClient.py     # IOU computation client
-│   └── Trainers/            # Training loops
-│       └── SFT/             # Supervised fine-tuning
-├── utils/                   # Configuration and utilities
-│   ├── config.py            # Default hyperparameters
-│   ├── model_utils.py       # Model loading helpers
-│   └── patches.py           # Accelerate compatibility patches
-└── results/                 # Training and evaluation outputs
-    ├── train/               # Training logs (.out, .err)
-    └── eval/                # Evaluation results (.json)
+├── centralized_train.py
+├── evaluate_model.py
+├── evaluate_model_minimal.py
+├── requirements.txt
+├── CADRL/
+│   ├── DataUtils/
+│   ├── Inference/
+│   └── Trainers/
+└── results/
+    ├── train/
+    └── eval/
 ```
 
-## References
+---
 
-- [Qwen3-VL Model](https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct)
-- [GenCAD-Code Dataset](https://huggingface.co/datasets/GenCAD/GenCAD-Code)
-- [CAD-Coder Paper](../references/cad_coder_paper.pdf)
+# **References**
 
+* Qwen3-VL Models — [https://huggingface.co/Qwen](https://huggingface.co/Qwen)
+* GenCAD-Code Dataset — [https://huggingface.co/datasets/GenCAD/GenCAD-Code](https://huggingface.co/datasets/GenCAD/GenCAD-Code)
+* CAD-Coder Paper — `references/cad_coder_paper.pdf`
+
+---
+
+# **Production ML Workflow (GKE)**
+
+This section summarizes the production-ready ML workflow we ship on GKE for the Qwen3-VL models. It is present in the repo but kept **disabled by default** to avoid unintended runs.
+
+## Components
+- **Orchestration:** `infrastructure/kubernetes/ml-workflow/` manifests (CronJob, ConfigMap, RBAC, PVC) plus backend hooks in `src/model_finetuning/ml_workflow/`.
+- **Data preprocessing:** Jobs pull the latest GenCAD-Code partitions (via DVC/GCS), normalize image/code pairs, and write to shared PVC.
+- **Training:** Qwen3-VL-2B training/eval scripts (CPU-friendly configs in tests; GPU-ready in production) with checkpoints stored to PVC/GCS.
+- **Evaluation:** Validation metrics (syntax validity, IOU-style geometry proxies) written to artifacts and compared against thresholds defined in `ml_workflow/config.py`.
+- **Validation gate:** `ModelValidator` enforces minimum quality before promotion.
+- **Deployment step (mocked hooks):** `ModelDeployment` contains stubs for promoting to Modal or updating GKE images. Hooks are wired but no-op unless explicitly enabled.
+
+## Triggers and Safety
+- **Primary trigger:** Scheduled CronJob (suspended by default). Enable by patching `ml-retraining-job` `spec.suspend=false`.
+- **Manual trigger:** Apply the job manifest or run the module entrypoint locally.
+- **CI gating:** No automatic deploy on PRs; deployment can be invoked only after CI success and explicit enablement.
+
+## Operational Notes
+- PVC is optional; artifacts can be redirected to GCS.
+- Secrets (tokens, URIs) are expected via Kubernetes secrets; tests use mocks.
+- Default concurrency is minimal to control cost; adjust CronJob resources if running on GPUs.
