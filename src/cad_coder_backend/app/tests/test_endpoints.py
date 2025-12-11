@@ -214,3 +214,88 @@ class TestServiceIntegrations:
         data, mime = modal_client._serialize_image(str(img_path))
         assert data is not None
         assert mime.lower().replace("/", "") == "png"
+
+    def test_model_service_generate_qwen(self, monkeypatch):
+        """Model service returns CAD dict for Qwen with RAG context."""
+        from app.services import model_service
+
+        async def mock_run_qwen(prompt, image=None):
+            return "# cad code qwen"
+
+        def mock_retrieve_context(**kwargs):
+            return {"context": "ctx", "results": [{"id": 1}], "used": True}
+
+        monkeypatch.setattr(model_service, "_run_qwen_inference", mock_run_qwen)
+        monkeypatch.setattr(model_service.rag_service, "retrieve_context", mock_retrieve_context)
+
+        result = asyncio.get_event_loop().run_until_complete(
+            model_service.generate_cad_code(prompt="p", model_choice="qwen")
+        )
+        assert result["cad_code"].startswith("# cad code")
+        assert result["rag_used"] is True
+        assert result["rag_context"] == "ctx"
+
+    def test_model_service_generate_llava(self, monkeypatch):
+        """Model service returns CAD dict for LLaVA."""
+        from app.services import model_service
+
+        async def mock_run_llava(prompt, image=None):
+            return "# cad code llava"
+
+        monkeypatch.setattr(model_service, "_run_llava_inference", mock_run_llava)
+
+        result = asyncio.get_event_loop().run_until_complete(
+            model_service.generate_cad_code(prompt="p", model_choice="llava")
+        )
+        assert result["cad_code"].startswith("# cad code")
+        assert result["rag_used"] is False
+
+    def test_model_service_invalid_choice_defaults_llava(self, monkeypatch):
+        """Invalid model choice should fall back to LLaVA path."""
+        from app.services import model_service
+
+        async def mock_run_llava(prompt, image=None):
+            return "# cad code llava"
+
+        monkeypatch.setattr(model_service, "_run_llava_inference", mock_run_llava)
+
+        result = asyncio.get_event_loop().run_until_complete(
+            model_service.generate_cad_code(prompt="p", model_choice="invalid")
+        )
+        assert "cad_code" in result
+
+    def test_rag_service_retrieve_context_basic(self, monkeypatch):
+        """RAG service should handle disabled flag gracefully."""
+        from app.services import rag_service
+
+        monkeypatch.setenv("ENABLE_RAG", "false")
+        import importlib
+        importlib.reload(rag_service)
+
+        res = rag_service.retrieve_context(prompt="p")
+        assert res["used"] is False
+        assert res["context"] == ""
+
+    def test_gke_client_serialize_image_none(self):
+        """GKE client serialize_image handles None."""
+        from app.services import gke_client
+
+        data, fmt = gke_client._serialize_image(None)
+        assert data is None
+        assert fmt is None
+
+    def test_modal_client_load_pil_image(self):
+        """Modal client load_pil_image handles PIL input."""
+        from app.services import modal_client
+
+        img = Image.new("RGB", (10, 10), color="red")
+        loaded = modal_client._load_pil_image(img)
+        assert loaded.mode == "RGB"
+
+    def test_modal_client_preprocess_llava_none(self):
+        """Modal client preprocess for LLaVA with None image."""
+        from app.services import modal_client
+
+        data, fmt = modal_client._preprocess_image_for_llava(None, target_size=64)
+        assert data is not None
+        assert fmt == "PNG"
