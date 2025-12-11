@@ -431,7 +431,7 @@ jobs:
               inputs: {
                 environment: 'production',
                 deploy_infrastructure: 'false',
-                deploy_models: 'false'
+                deploy_models: 'true'
               }
             });
             console.log('Deployment workflow triggered - all CI checks passed');

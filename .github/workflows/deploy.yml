@@ -1,12 +1,7 @@
 name: Deploy to GCP
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'infrastructure/**'
-      - '.github/workflows/deploy.yml'
+  # Deployment is only triggered via workflow_dispatch from CI after all checks pass
   workflow_dispatch:
     inputs:
       environment:
